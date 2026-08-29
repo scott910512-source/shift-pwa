@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>4조 2교대 근무표</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="공장 4조 2교대(3일 근무 3일 휴무) 근무표. 오늘 주간·야간 근무조와 조원을 바로 확인합니다.">
+
+<meta name="theme-color" content="#e8ebee" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d1117" media="(prefers-color-scheme: dark)">
+<meta name="color-scheme" content="light dark">
+
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="근무표">
+<link rel="apple-touch-icon" href="./icons/icon-192.png">
+
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" href="./icons/icon-192.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="./app.css">
+</head>
+<body>
+
+<div class="wrap">
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-main">4조 2교대</span>
+      <span class="brand-sub">근무표</span>
+    </div>
+    <div class="nowbox">
+      <div class="now-date" id="nowDate">—</div>
+      <div class="now-clock" id="nowClock">--:--:--</div>
+    </div>
+  </header>
+
+  <main>
+
+    <section class="sec sec-today" aria-labelledby="todayHead">
+      <h2 class="sec-head" id="todayHead">
+        <span>오늘 근무</span>
+        <span class="sec-head-sub" id="todayKey">KST</span>
+      </h2>
+      <div class="cards" id="todayCards"></div>
+      <div class="offrow" id="todayOff"></div>
+    </section>
+
+    <section class="sec sec-cal" aria-labelledby="calHead">
+      <div class="cal-bar">
+        <button class="navbtn" id="prevMonth" type="button" aria-label="이전 달">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+        </button>
+        <h2 class="sec-head cal-title" id="calHead">2026년 9월</h2>
+        <button class="navbtn" id="nextMonth" type="button" aria-label="다음 달">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+        </button>
+        <button class="todaybtn" id="goToday" type="button">오늘</button>
+      </div>
+      <div class="dowrow" aria-hidden="true">
+        <span class="sun">일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span class="sat">토</span>
+      </div>
+      <div class="grid" id="calGrid" role="grid" aria-label="월간 근무 달력"></div>
+      <p class="hint">날짜를 누르면 그날 근무자 명단이 나옵니다.</p>
+    </section>
+
+  </main>
+
+  <footer class="foot">
+    <span>주간 08:00–20:00 · 야간 20:00–08:00</span>
+    <span>3일 근무 · 3일 휴무 / 12일 주기 · 한국 표준시(KST) 기준</span>
+  </footer>
+
+</div>
+
+<div class="backdrop" id="backdrop" hidden></div>
+
+<section class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" hidden>
+  <div class="sheet-grip" aria-hidden="true"></div>
+  <header class="sheet-head">
+    <button class="navbtn" id="sheetPrev" type="button" aria-label="이전 날">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+    </button>
+    <div class="sheet-title-box">
+      <h3 class="sheet-title" id="sheetTitle">—</h3>
+      <div class="sheet-sub" id="sheetSub">—</div>
+    </div>
+    <button class="navbtn" id="sheetNext" type="button" aria-label="다음 날">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+    </button>
+    <button class="navbtn closebtn" id="sheetClose" type="button" aria-label="닫기">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </header>
+  <div class="sheet-body">
+    <div class="cards" id="sheetCards"></div>
+    <div class="offrow" id="sheetOff"></div>
+  </div>
+</section>
+
+<script src="./app.js"></script>
+</body>
+</html>
