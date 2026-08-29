@@ -71,6 +71,14 @@
 
   var STORE_KEY = 'shift-pwa:data:v1';
 
+  /* ------------------------------------------------------------
+     기본 명단(SEED)
+     여기를 고치고 SEED_VERSION 을 1 올려서 배포하면,
+     기기에서 따로 수정하지 않은 사용자에게는 자동으로 반영된다.
+     기기에서 직접 수정한 사용자에게는 설정 화면에 적용 버튼이 뜬다.
+     ------------------------------------------------------------ */
+  var SEED_VERSION = 1;
+
   var PLANTS = [
     { key: '1', label: '1공장' },
     { key: '2', label: '2공장' },
@@ -86,7 +94,13 @@
     };
   }
   function defaults() {
-    return { version: 1, crews: seedCrews(), settings: { theme: 'auto' } };
+    return {
+      version: 1,
+      seedVersion: SEED_VERSION,
+      edited: false,               // 이 기기에서 명단을 직접 수정했는가
+      crews: seedCrews(),
+      settings: { theme: 'auto' }
+    };
   }
 
   // 어떤 입력이 와도 안전한 형태로 정규화한다 (손상된 저장값 방어)
@@ -94,7 +108,14 @@
     var base = defaults();
     if (!raw || typeof raw !== 'object') return base;
 
-    var out = { version: 1, crews: {}, settings: { theme: 'auto' } };
+    var out = {
+      version: 1,
+      seedVersion: (typeof raw.seedVersion === 'number' && isFinite(raw.seedVersion))
+        ? raw.seedVersion : 0,
+      edited: raw.edited === true,
+      crews: {},
+      settings: { theme: 'auto' }
+    };
     var rc = (raw.crews && typeof raw.crews === 'object') ? raw.crews : {};
 
     for (var i = 0; i < TEAMS.length; i++) {
@@ -127,15 +148,42 @@
 
   var DATA = defaults();
 
+  var seedUpdateAvailable = false;   // 새 기본 명단이 있는데 이 기기는 직접 수정한 상태
+
   function loadStore() {
     try {
       var raw = localStorage.getItem(STORE_KEY);
-      if (!raw) { DATA = defaults(); return; }
+      if (!raw) { DATA = defaults(); saveStore(); return; }
       DATA = normalize(JSON.parse(raw));
     } catch (e) {
       console.warn('저장된 데이터를 읽지 못해 기본값을 사용합니다:', e);
       DATA = defaults();
     }
+    applySeedIfNeeded();
+  }
+
+  // 배포된 기본 명단이 더 최신이면, 직접 수정한 적 없는 기기는 자동으로 따라간다.
+  function applySeedIfNeeded() {
+    seedUpdateAvailable = false;
+    if (DATA.seedVersion === SEED_VERSION) return;
+    if (!DATA.edited) {
+      DATA.crews = seedCrews();
+      DATA.seedVersion = SEED_VERSION;
+      saveStore();
+      console.log('[근무표] 기본 명단 v' + SEED_VERSION + ' 을 반영했습니다.');
+    } else {
+      seedUpdateAvailable = true;   // 덮어쓰지 않고 설정 화면에서 물어본다
+    }
+  }
+
+  function adoptSeed() {
+    DATA.crews = seedCrews();
+    DATA.seedVersion = SEED_VERSION;
+    DATA.edited = false;
+    draft = deepCopyCrews();
+    saveStore();
+    seedUpdateAvailable = false;
+    homeSig = '';
   }
   function saveStore() {
     try {
@@ -569,6 +617,24 @@
     ensureDraft();
     var frag = document.createDocumentFragment();
 
+    if (seedUpdateAvailable) {
+      var nb = el('div', 'notice');
+      nb.appendChild(el('div', 'notice-t', '새 기본 명단이 배포되었습니다'));
+      nb.appendChild(el('div', 'notice-b',
+        '이 기기의 명단은 직접 수정한 상태라 자동으로 바뀌지 않았습니다. ' +
+        '아래를 누르면 배포된 명단으로 맞춥니다. (이 기기에서 수정한 내용은 사라집니다)'));
+      var nba = el('button', 'btn btn-primary btn-wide', '배포된 기본 명단 적용');
+      nba.type = 'button';
+      nba.addEventListener('click', function () {
+        if (!window.confirm('이 기기에서 수정한 명단을 버리고 배포된 명단으로 맞춥니다. 계속할까요?')) return;
+        adoptSeed();
+        renderAll();
+        toast('기본 명단을 적용했습니다');
+      });
+      nb.appendChild(nba);
+      frag.appendChild(nb);
+    }
+
     var seg = el('div', 'seg');
     TEAMS.forEach(function (t) {
       var b = el('button', 'segb', t);
@@ -661,6 +727,9 @@
     save.type = 'button';
     save.addEventListener('click', function () {
       DATA.crews = normalize({ crews: draft }).crews;   // 빈 이름 제거 + 정규화
+      DATA.edited = true;                 // 이후 기본 명단이 바뀌어도 덮어쓰지 않는다
+      DATA.seedVersion = SEED_VERSION;
+      seedUpdateAvailable = false;
       draft = deepCopyCrews();
       if (saveStore()) {
         homeSig = '';
@@ -773,6 +842,8 @@
     info.appendChild(ih);
     var ib = el('div', 'panel-b');
     [
+      ['기본 명단 버전', 'v' + SEED_VERSION],
+      ['현재 명단', DATA.edited ? '이 기기에서 수정함' : '배포된 기본 명단'],
       ['오프라인', '지원 (서비스워커 캐시)'],
       ['데이터 저장', '이 기기 (localStorage)'],
       ['서버 전송', '없음']
@@ -874,6 +945,9 @@
       try { parsed = JSON.parse(txt); } catch (e) { toast('JSON 형식이 아닙니다'); return; }
       if (!window.confirm('현재 명단을 백업 내용으로 덮어씁니다. 계속할까요?')) return;
       DATA.crews = normalize({ crews: parsed.crews || parsed }).crews;
+      DATA.edited = true;
+      DATA.seedVersion = SEED_VERSION;
+      seedUpdateAvailable = false;
       draft = deepCopyCrews();
       saveStore();
       homeSig = '';
@@ -885,16 +959,13 @@
     ip.appendChild(ib);
     frag.appendChild(ip);
 
-    var reset = el('button', 'btn btn-danger btn-wide', '기본값으로 초기화');
+    var reset = el('button', 'btn btn-danger btn-wide', '기본 명단으로 되돌리기');
     reset.type = 'button';
     reset.addEventListener('click', function () {
-      if (!window.confirm('저장된 명단을 모두 지우고 기본값으로 되돌립니다. 계속할까요?')) return;
-      DATA.crews = seedCrews();
-      draft = deepCopyCrews();
-      saveStore();
-      homeSig = '';
+      if (!window.confirm('이 기기에서 수정한 명단을 지우고 배포된 기본 명단으로 되돌립니다. 계속할까요?')) return;
+      adoptSeed();
       renderAll();
-      toast('초기화했습니다');
+      toast('기본 명단으로 되돌렸습니다');
     });
     frag.appendChild(reset);
     frag.appendChild(el('p', 'note',
@@ -1025,7 +1096,8 @@
 
     window.SHIFT = {
       shiftOf: shiftOf, runSelfTest: runSelfTest, keyOf: keyOf,
-      data: function () { return DATA; }, go: go, openSheet: openSheet
+      data: function () { return DATA; }, go: go, openSheet: openSheet,
+      seedVersion: SEED_VERSION, adoptSeed: adoptSeed
     };
   }
 

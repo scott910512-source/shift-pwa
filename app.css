@@ -448,3 +448,13 @@ textarea.inp{ min-height:120px; padding:10px 12px; font-family:var(--fm);
   .cchip{ font-size:9px; }
   .wrow{ grid-template-columns:56px 1fr; gap:8px; }
 }
+
+/* ---------------- 안내 배너 ---------------- */
+.notice{
+  background:var(--day-soft);
+  border:1px solid var(--day-edge);
+  border-radius:var(--r);
+  padding:11px 12px; margin-bottom:12px;
+}
+.notice-t{ font-size:13.5px; font-weight:700; color:var(--day); margin-bottom:3px; }
+.notice-b{ font-size:12px; color:var(--fg-2); line-height:1.5; margin-bottom:9px; }
