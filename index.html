@@ -6,13 +6,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="description" content="공장 4조 2교대 근무표. 오늘 주간·야간 근무조와 근무자 명단을 바로 확인합니다.">
 
-<meta name="theme-color" content="#f2f4f6" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0e1216" media="(prefers-color-scheme: dark)">
-<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#0a0e14">
+<meta name="color-scheme" content="dark light">
 
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="근무표">
 <link rel="apple-touch-icon" href="./icons/icon-192.png">
 
@@ -21,55 +20,77 @@
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="./app.css">
 </head>
 <body>
 
 <header class="hd">
-  <div class="hd-r1">
-    <h1 class="hd-title">4조 2교대 근무표</h1>
-    <button class="icobtn" id="hdSettings" type="button" aria-label="설정">
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <circle cx="12" cy="12" r="3.1"/>
-        <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 8.9 19.3a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.7 8.9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1.03-1.56V3a2 2 0 1 1 4 0v.1A1.7 1.7 0 0 0 15.1 4.7a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9v.1a1.7 1.7 0 0 0 1.56 1.02H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1.03z"/>
-      </svg>
-    </button>
-  </div>
-  <div class="hd-r2">
-    <span class="hd-date" id="hdDate">—</span>
-    <span class="hd-time" id="hdTime">--:--</span>
-  </div>
+  <button class="ib" id="hdMenu" type="button" aria-label="설정 열기"></button>
+  <h1 class="hd-t"><b>4조 2교대</b> <span>근무표</span></h1>
+  <button class="ib" id="hdBell" type="button" aria-label="공지사항 열기"></button>
 </header>
 
 <main class="main">
 
-  <!-- ================= 홈 ================= -->
+  <!-- ============ 근무표(홈) ============ -->
   <section class="view" id="viewHome">
-    <div id="homeCards"></div>
-    <div class="offbar" id="homeOff"></div>
-    <div id="homeCal" class="calbox"></div>
-  </section>
 
-  <!-- ================= 달력 ================= -->
-  <section class="view" id="viewCal" hidden>
-    <div id="fullCal" class="calbox"></div>
-    <div class="legend">
-      <span><i class="sw d"></i>주간</span>
-      <span><i class="sw n"></i>야간</span>
-      <span class="legend-hint">날짜를 누르면 근무자 명단이 나옵니다</span>
+    <div class="infobar">
+      <div class="ib-l">
+        <div class="ib-date" id="ibDate">—</div>
+        <div class="ib-clock" id="ibClock">--:--:--</div>
+      </div>
+      <div class="ib-r">
+        <div class="ib-cap">현재 교대</div>
+        <div class="ib-now" id="ibNow">—</div>
+      </div>
+      <div class="ib-btns">
+        <button class="pill" id="btnToday" type="button"><span>오늘</span></button>
+        <button class="pill" id="btnStatus" type="button"><span>교대 정보</span></button>
+      </div>
     </div>
+
+    <h2 class="sect">오늘 근무 현황</h2>
+    <div class="scards" id="homeCards"></div>
+    <div class="offbar" id="homeOff"></div>
+
+    <div class="calbar">
+      <button class="ib sm" id="calPrev" type="button" aria-label="이전 달"></button>
+      <div class="cal-t" id="calTitle">—</div>
+      <button class="ib sm" id="calNext" type="button" aria-label="다음 달"></button>
+      <button class="pill" id="calToggle" type="button"><span>전체 달력</span></button>
+    </div>
+    <div class="dow" aria-hidden="true"></div>
+    <div class="cgrid" id="calGrid" aria-label="근무 달력"></div>
+    <p class="hint">날짜를 누르면 그날 근무자 명단이 나옵니다.</p>
+
   </section>
 
-  <!-- ================= 조 정보 ================= -->
-  <section class="view" id="viewCrew" hidden>
-    <div class="seg" id="crewSeg" role="tablist" aria-label="조 선택"></div>
-    <div id="crewBody"></div>
+  <!-- ============ 교대 현황 ============ -->
+  <section class="view" id="viewStatus" hidden>
+    <h2 class="sect">오늘 조별 현황</h2>
+    <div id="statusToday"></div>
+    <h2 class="sect">조 구성</h2>
+    <div class="seg" id="statusSeg" role="tablist" aria-label="조 선택"></div>
+    <div id="statusBody"></div>
   </section>
 
-  <!-- ================= 설정 ================= -->
+  <!-- ============ 조 설정 ============ -->
+  <section class="view" id="viewCrewSet" hidden>
+    <h2 class="sect">근무조 구성</h2>
+    <div id="crewSetBody"></div>
+  </section>
+
+  <!-- ============ 공지사항 ============ -->
+  <section class="view" id="viewNotice" hidden>
+    <h2 class="sect">공지사항</h2>
+    <div id="noticeBody"></div>
+  </section>
+
+  <!-- ============ 설정 ============ -->
   <section class="view" id="viewSet" hidden>
-    <div class="seg seg-wrap" id="setSeg" role="tablist" aria-label="설정 분류"></div>
+    <div class="seg seg2" id="setSeg" role="tablist" aria-label="설정 분류"></div>
     <div id="setBody"></div>
   </section>
 
@@ -80,19 +101,15 @@
 <div class="backdrop" id="backdrop" hidden></div>
 
 <section class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" hidden>
-  <div class="sheet-grip" aria-hidden="true"></div>
+  <div class="grip" aria-hidden="true"></div>
   <header class="sheet-hd">
-    <button class="icobtn" id="sheetPrev" type="button" aria-label="이전 날">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
-    </button>
-    <h2 class="sheet-title" id="sheetTitle">—</h2>
-    <button class="icobtn" id="sheetNext" type="button" aria-label="다음 날">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
-    </button>
+    <button class="ib" id="sheetPrev" type="button" aria-label="이전 날"></button>
+    <h2 class="sheet-t" id="sheetTitle">—</h2>
+    <button class="ib" id="sheetNext" type="button" aria-label="다음 날"></button>
   </header>
   <div class="sheet-body" id="sheetBody"></div>
   <div class="sheet-foot">
-    <button class="btn btn-wide" id="sheetClose" type="button">닫기</button>
+    <button class="btn wide" id="sheetClose" type="button">닫기</button>
   </div>
 </section>
 
