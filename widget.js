@@ -186,7 +186,7 @@ function chip(row, text, f) {
   const box = row.addStack();
   box.backgroundColor = C_CHIP;
   box.cornerRadius = 4;
-  box.setPadding(2, 5, 2, 5);
+  box.setPadding(2, 4, 2, 4);
   box.size = new Size(f.labelW, 0);
   box.centerAlignContent();
   txt(box, text, f.label, C_MUTE);
@@ -197,7 +197,7 @@ function chip(row, text, f) {
 function plantRow(col, team, plant, f) {
   const row = col.addStack();
   row.centerAlignContent();
-  row.spacing = 6;
+  row.spacing = 5;
   chip(row, plant + "공장", f);
   const list = membersOf(team, plant);
   txt(row, list.length ? list.join(" ") : "미등록", f.name,
@@ -286,15 +286,21 @@ function topRow(w, cur, offs, f, now) {
 // 갱신하지 않는다. 너무 짧게 잡으면 iOS 가 갱신 횟수를 줄여버린다.
 const REFRESH_MS = 15 * 60 * 1000;
 
+// 아이폰에서 medium 과 large 는 폭이 같고 높이만 다르다. 그래서 이름 크기는
+// 둘이 비슷하게 두고, large 는 남는 높이를 제목과 아래 목록에 쓴다.
 const FONTS = {
-  small:  { date: 11,   meta: 9,   icon: 11, kind: 10,   team: 15, leader: 11,   badge: 9,
-            label: 8,   name: 9,    labelW: 30, gapHead: 3, gapRow: 2, divH: 0 },
-  medium: { date: 11.5, meta: 9.5, icon: 11, kind: 9.5,  team: 13, leader: 11,   badge: 8.5,
-            label: 8,   name: 9.5,  labelW: 30, gapHead: 5, gapRow: 4, divH: 84 },
-  large:  { date: 14,   meta: 11,  icon: 13, kind: 11.5, team: 16, leader: 13.5, badge: 10.5,
-            label: 9.5, name: 11.5, labelW: 36, gapHead: 7, gapRow: 6, divH: 112 },
-  extraLarge: { date: 15, meta: 12, icon: 15, kind: 13, team: 19, leader: 15, badge: 12,
-            label: 11,  name: 13.5, labelW: 42, gapHead: 8, gapRow: 7, divH: 130 }
+  small:  { date: 11.5, meta: 9.5,  icon: 12, kind: 10.5, team: 16,   leader: 12,   badge: 9.5,
+            label: 8.5,  name: 10,   labelW: 26, gapHead: 4, gapRow: 3, divH: 0,
+            pad: 11, gap: 0 },
+  medium: { date: 12.5, meta: 10,   icon: 12, kind: 10.5, team: 16,   leader: 13,   badge: 9.5,
+            label: 8.5,  name: 12,   labelW: 27, gapHead: 5, gapRow: 5, divH: 88,
+            pad: 9,  gap: 7 },
+  large:  { date: 14.5, meta: 11.5, icon: 14, kind: 12,   team: 18,   leader: 14.5, badge: 11,
+            label: 9,    name: 12.5, labelW: 28, gapHead: 6, gapRow: 6, divH: 98,
+            pad: 10, gap: 8 },
+  extraLarge: { date: 16, meta: 13, icon: 17, kind: 14.5, team: 21.5, leader: 17,   badge: 12.5,
+            label: 11.5, name: 15.5, labelW: 39, gapHead: 8, gapRow: 8, divH: 122,
+            pad: 13, gap: 12 }
 };
 
 function buildWidget(family, now = Date.now()) {
@@ -340,7 +346,7 @@ function buildWidget(family, now = Date.now()) {
   }
 
   // 가로 2단 — 왼쪽 주간 / 오른쪽 야간
-  const pad = family === "medium" ? 11 : 14;
+  const pad = f.pad;
   w.setPadding(pad, pad + 1, pad, pad + 1);
 
   topRow(w, cur, offs, f, now);
@@ -350,7 +356,7 @@ function buildWidget(family, now = Date.now()) {
   body.layoutHorizontally();
   body.topAlignContent();
 
-  const gap = family === "medium" ? 10 : 14;
+  const gap = f.gap;
   const colW = Math.max(120, Math.floor((widgetWidth(family) - (pad + 1) * 2 - gap * 2 - 1) / 2));
 
   shiftColumn(body, "day", dayS.day, f, colW, { now: cur.kind === "day" });
