@@ -301,13 +301,13 @@ const FONTS = {
             label: 8.5,  name: 10,   nameBig: 12,   labelW: 10, gapHead: 4, gapRow: 3, divH: 0,
             pad: 11, gap: 0 },
   medium: { date: 12.5, meta: 10,   icon: 12, kind: 10,   team: 15,   leader: 12.5, badge: 9,
-            label: 8.5,  name: 11,   nameBig: 14,   labelW: 11, gapHead: 5, gapRow: 5, divH: 88,
+            label: 8.5,  name: 11,   nameBig: 14,   labelW: 11, gapHead: 5, gapRow: 4, divH: 72,
             pad: 9,  gap: 7 },
   large:  { date: 14.5, meta: 11.5, icon: 14, kind: 11.5, team: 17,   leader: 14,   badge: 10.5,
-            label: 9,    name: 12,   nameBig: 15,   labelW: 12, gapHead: 6, gapRow: 6, divH: 98,
+            label: 9,    name: 12,   nameBig: 15,   labelW: 12, gapHead: 6, gapRow: 6, divH: 82,
             pad: 10, gap: 8 },
   extraLarge: { date: 16, meta: 13, icon: 17, kind: 14,   team: 21,   leader: 16.5, badge: 12.5,
-            label: 11,   name: 15,   nameBig: 18.5, labelW: 14, gapHead: 8, gapRow: 8, divH: 122,
+            label: 11,   name: 15,   nameBig: 18.5, labelW: 14, gapHead: 8, gapRow: 8, divH: 104,
             pad: 13, gap: 12 }
 };
 
@@ -374,7 +374,9 @@ function buildWidget(family, now = Date.now()) {
   shiftColumn(body, "night", nightS.night, f, colW, { now: cur.kind === "night" });
   body.addSpacer();
 
-  if (cur.dawn) {
+  // 새벽 안내는 세로 여유가 있는 큰 위젯에서만. medium 에 넣으면 높이를 넘겨
+  // iOS 가 위젯 전체 글자를 줄여버린다.
+  if (cur.dawn && family !== "medium") {
     w.addSpacer(6);
     txt(w, `야간 ${nightS.night}조는 어제 20:00 시작 · 오늘 08:00 종료`, f.meta, C_DIM, { lineLimit: 1, minScale: 0.7 });
   }
