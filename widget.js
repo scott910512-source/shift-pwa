@@ -135,6 +135,9 @@ const C_MUTE  = new Color("#98a3b1");
 const C_DIM   = new Color("#68737f");
 const C_DAY   = new Color("#f0ad3c");
 const C_NIGHT = new Color("#7d99f7");
+const C_CHIP  = new Color("#1c2331");
+const C_LINE  = new Color("#2a3444");
+const C_LINE2 = new Color("#39445a");
 
 function txt(stack, s, size, color, opts = {}) {
   const t = stack.addText(s);
@@ -161,32 +164,53 @@ function symbol(stack, name, size, color) {
 
 // ---------- 구성 요소 ----------
 
-// 고정폭 라벨 — 공장별 이름 시작 위치를 맞춘다
-function label(row, text, w, size, color) {
+// 위젯 폭 추정 (2단을 정확히 반씩 나누기 위해 필요)
+function widgetWidth(family) {
+  let sw = 390;
+  try {
+    const s = Device.screenSize();
+    sw = Math.min(s.width, s.height);
+  } catch (e) { /* 기본값 사용 */ }
+  let w;
+  if (sw >= 428) w = 364;
+  else if (sw >= 414) w = 360;
+  else if (sw >= 390) w = 338;
+  else if (sw >= 375) w = 329;
+  else w = 292;
+  if (family === "extraLarge") w = w * 2 + 16;   // 아이패드
+  return w;
+}
+
+// 공장 라벨 칩
+function chip(row, text, f) {
   const box = row.addStack();
-  box.size = new Size(w, 0);
-  txt(box, text, size, color);
+  box.backgroundColor = C_CHIP;
+  box.cornerRadius = 4;
+  box.setPadding(2, 5, 2, 5);
+  box.size = new Size(f.labelW, 0);
+  box.centerAlignContent();
+  txt(box, text, f.label, C_MUTE);
   return box;
 }
 
-// 공장 한 줄:  1공장  임재훈 조은비 황선우 남기훈
-function plantRow(w, team, plant, f) {
-  const row = w.addStack();
+// 공장 한 줄:  [1공장]  인재홍 주오빈 황서우 남기호
+function plantRow(col, team, plant, f) {
+  const row = col.addStack();
   row.centerAlignContent();
-  row.spacing = 5;
-  label(row, plant + "공장", f.labelW, f.label, C_DIM);
+  row.spacing = 6;
+  chip(row, plant + "공장", f);
   const list = membersOf(team, plant);
   txt(row, list.length ? list.join(" ") : "미등록", f.name,
-      list.length ? C_FG : C_DIM, { lineLimit: 1, minScale: 0.5 });
+      list.length ? C_FG : C_DIM, { lineLimit: 1, minScale: 0.45 });
   row.addSpacer();
   return row;
 }
 
-// 교대 제목 줄:  ☀ 주간 C조 · 김민규            ● 근무중
-function shiftHead(w, kind, team, f, opts = {}) {
+// 교대 제목 줄:  ☀ 주간 C조 · 김민규        ● 근무중
+function shiftHead(col, kind, team, f, opts = {}) {
   const isDay = kind === "day";
   const color = isDay ? C_DAY : C_NIGHT;
-  const row = w.addStack();
+  const row = col.addStack();
   row.centerAlignContent();
   row.spacing = 4;
 
@@ -195,32 +219,44 @@ function shiftHead(w, kind, team, f, opts = {}) {
   txt(row, team + "조", f.team, color, { bold: true });
   txt(row, "·", f.kind, C_DIM);
   const lead = leaderOf(team);
-  txt(row, lead || "조장 미등록", f.leader, lead ? C_FG : C_DIM, { bold: true });
-
+  txt(row, lead || "미등록", f.leader, lead ? C_FG : C_DIM, { bold: true });
   row.addSpacer();
   if (opts.now) txt(row, "● 근무중", f.badge, color);
   else txt(row, isDay ? "08:00~" : "20:00~", f.badge, C_DIM, { mono: true });
   return row;
 }
 
-// 교대 한 덩어리 = 제목 + 1·2·3공장
-function shiftBlock(w, kind, team, f, opts = {}) {
-  shiftHead(w, kind, team, f, opts);
-  w.addSpacer(f.gapHead);
+// 한 단(주간 또는 야간) = 제목 + 1·2·3공장
+function shiftColumn(parent, kind, team, f, colW, opts = {}) {
+  const col = parent.addStack();
+  col.layoutVertically();
+  if (colW) col.size = new Size(colW, 0);
+  shiftHead(col, kind, team, f, opts);
+  col.addSpacer(f.gapHead);
   PLANTS.forEach((p, i) => {
-    if (i) w.addSpacer(f.gapRow);
-    plantRow(w, team, p, f);
+    if (i) col.addSpacer(f.gapRow);
+    plantRow(col, team, p, f);
   });
+  return col;
 }
 
-// 맨 윗줄:  8/30 (일)  1일차  휴무 B·D            19:42
+// 두 단 사이 세로 구분선
+function divider(row, h) {
+  const d = row.addStack();
+  d.size = new Size(1, h);
+  d.backgroundColor = C_LINE;
+  return d;
+}
+
+// 맨 윗줄:  8/30 (일) │ 1일차  휴무 B·D                    10:34
 function topRow(w, cur, offs, f) {
   const row = w.addStack();
   row.centerAlignContent();
-  row.spacing = 5;
+  row.spacing = 6;
   const s = shiftOf(cur.todayKey);
-  txt(row, labelOf(cur.todayKey), f.date, C_FG, { mono: true, bold: true });
-  txt(row, `${s.nth}일차`, f.meta, C_DIM, { mono: true });
+  txt(row, labelOf(cur.todayKey), f.date, C_FG, { bold: true });
+  txt(row, "│", f.meta, C_LINE2);
+  txt(row, `${s.nth}일차`, f.meta, C_DIM);
   txt(row, "휴무 " + offs.join("·"), f.meta, C_MUTE);
   row.addSpacer();
   const p = kstParts();
@@ -229,14 +265,15 @@ function topRow(w, cur, offs, f) {
 }
 
 // ---------- 위젯 ----------
-// 크기별 글자/여백. medium 에 9줄이 들어가도록 촘촘하게 잡았다.
 const FONTS = {
-  small:  { date: 11, meta: 9,   icon: 11, kind: 10,   team: 15, leader: 11, badge: 9,
-            label: 8,    name: 9,  labelW: 24, gapHead: 3, gapRow: 2 },
-  medium: { date: 11, meta: 9.5, icon: 12, kind: 10.5, team: 14, leader: 12, badge: 9.5,
-            label: 8.5,  name: 10, labelW: 27, gapHead: 4, gapRow: 3 },
-  large:  { date: 14, meta: 12,  icon: 15, kind: 13,   team: 19, leader: 15, badge: 11.5,
-            label: 10.5, name: 13, labelW: 34, gapHead: 6, gapRow: 4 }
+  small:  { date: 11,   meta: 9,   icon: 11, kind: 10,   team: 15, leader: 11,   badge: 9,
+            label: 8,   name: 9,    labelW: 30, gapHead: 3, gapRow: 2, divH: 0 },
+  medium: { date: 11.5, meta: 9.5, icon: 11, kind: 9.5,  team: 13, leader: 11,   badge: 8.5,
+            label: 8,   name: 9.5,  labelW: 30, gapHead: 5, gapRow: 4, divH: 84 },
+  large:  { date: 14,   meta: 11,  icon: 13, kind: 11.5, team: 16, leader: 13.5, badge: 10.5,
+            label: 9.5, name: 11.5, labelW: 36, gapHead: 7, gapRow: 6, divH: 112 },
+  extraLarge: { date: 15, meta: 12, icon: 15, kind: 13, team: 19, leader: 15, badge: 12,
+            label: 11,  name: 13.5, labelW: 42, gapHead: 8, gapRow: 7, divH: 130 }
 };
 
 function buildWidget(family, now = Date.now()) {
@@ -254,15 +291,14 @@ function buildWidget(family, now = Date.now()) {
 
   w.refreshAfterDate = new Date(cur.boundary);   // 교대 시각에 갱신 요청
 
-  // 작은 위젯은 폭이 좁아 이름을 다 넣으면 못 읽는다 → 조 · 조장까지
+  // 작은 위젯은 2단으로 나눌 폭이 없다 → 조·조장만 세로로
   if (family === "small") {
     w.setPadding(11, 11, 11, 11);
-    const s = shiftOf(tKey);
     const top = w.addStack();
     top.centerAlignContent();
-    txt(top, labelOf(tKey), f.date, C_FG, { mono: true, bold: true });
+    txt(top, labelOf(tKey), f.date, C_FG, { bold: true });
     top.addSpacer();
-    txt(top, `${s.nth}일차`, f.meta, C_DIM, { mono: true });
+    txt(top, `${dayS.nth}일차`, f.meta, C_DIM);
     w.addSpacer(7);
     shiftHead(w, "day", dayS.day, f, { now: cur.kind === "day" });
     w.addSpacer(5);
@@ -277,45 +313,49 @@ function buildWidget(family, now = Date.now()) {
     return w;
   }
 
-  if (family === "large") {
-    w.setPadding(14, 14, 14, 14);
-    topRow(w, cur, offs, f);
-    w.addSpacer(10);
-    shiftBlock(w, "day", dayS.day, f, { now: cur.kind === "day" });
-    w.addSpacer(11);
-    shiftBlock(w, "night", nightS.night, f, { now: cur.kind === "night" });
-    if (cur.dawn) {
-      w.addSpacer(6);
-      txt(w, `야간 ${nightS.night}조는 어제 20:00 시작 · 오늘 08:00 종료`, 10.5, C_DIM, { lineLimit: 2 });
-    }
-    w.addSpacer(10);
-    txt(w, "다가오는 근무", 10.5, C_DIM);
-    w.addSpacer(4);
+  // 가로 2단 — 왼쪽 주간 / 오른쪽 야간
+  const pad = family === "medium" ? 11 : 14;
+  w.setPadding(pad, pad + 1, pad, pad + 1);
+
+  topRow(w, cur, offs, f);
+  w.addSpacer(family === "medium" ? 9 : 12);
+
+  const body = w.addStack();
+  body.layoutHorizontally();
+  body.topAlignContent();
+
+  const gap = family === "medium" ? 10 : 14;
+  const colW = Math.max(120, Math.floor((widgetWidth(family) - (pad + 1) * 2 - gap * 2 - 1) / 2));
+
+  shiftColumn(body, "day", dayS.day, f, colW, { now: cur.kind === "day" });
+  body.addSpacer(gap);
+  divider(body, f.divH);
+  body.addSpacer(gap);
+  shiftColumn(body, "night", nightS.night, f, colW, { now: cur.kind === "night" });
+  body.addSpacer();
+
+  if (cur.dawn) {
+    w.addSpacer(6);
+    txt(w, `야간 ${nightS.night}조는 어제 20:00 시작 · 오늘 08:00 종료`, f.meta, C_DIM, { lineLimit: 1, minScale: 0.7 });
+  }
+
+  // 큰 위젯은 남는 공간에 앞으로의 근무를 덧붙인다
+  if (family === "large" || family === "extraLarge") {
+    w.addSpacer(12);
+    txt(w, "다가오는 근무", f.meta, C_DIM);
+    w.addSpacer(5);
     for (let i = 1; i <= 4; i++) {
       const k = tKey + i * DAY;
       const s = shiftOf(k);
       const r = w.addStack();
       r.centerAlignContent();
       r.spacing = 6;
-      txt(r, labelOf(k), 11.5, C_MUTE, { mono: true });
+      txt(r, labelOf(k), f.meta + 1, C_MUTE, { mono: true });
       r.addSpacer();
-      txt(r, "주 " + s.day, 11.5, C_DAY, { mono: true });
-      txt(r, "야 " + s.night, 11.5, C_NIGHT, { mono: true });
-      w.addSpacer(3);
+      txt(r, "주 " + s.day, f.meta + 1, C_DAY, { mono: true });
+      txt(r, "야 " + s.night, f.meta + 1, C_NIGHT, { mono: true });
+      w.addSpacer(4);
     }
-    return w;
-  }
-
-  // medium — 날짜/시간 + 주간(조장·1·2·3공장) + 야간(조장·1·2·3공장)
-  w.setPadding(9, 12, 9, 12);
-  topRow(w, cur, offs, f);
-  w.addSpacer(6);
-  shiftBlock(w, "day", dayS.day, f, { now: cur.kind === "day" });
-  w.addSpacer(7);
-  shiftBlock(w, "night", nightS.night, f, { now: cur.kind === "night" });
-  if (cur.dawn) {
-    w.addSpacer(4);
-    txt(w, `야간 ${nightS.night}조는 어제 20:00 시작`, 9, C_DIM);
   }
   return w;
 }
