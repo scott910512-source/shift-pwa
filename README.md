@@ -52,10 +52,11 @@
 
 ## 홈 화면 위젯 (아이폰)
 
-`widget.js` 를 Scriptable 앱에 붙여넣으면 홈/잠금 화면 위젯으로 오늘 근무조를
-볼 수 있습니다. 설치와 명단 배포 절차는 [WIDGET.md](WIDGET.md) 참고.
+`widget-loader.js` 를 Scriptable 앱에 한 번 붙여넣으면 홈/잠금 화면 위젯으로
+오늘 근무조를 볼 수 있습니다. 설치 방법은 [WIDGET.md](WIDGET.md) 참고.
 
-위젯은 `crew.json` 을 받아 쓰므로 명단이 바뀌어도 다시 설치할 필요가 없습니다.
+로더가 `widget.js` 와 `crew.json` 을 받아 쓰므로, 레이아웃이 바뀌든 명단이
+바뀌든 **다시 붙여넣을 필요가 없습니다.**
 `crew.json` 은 `node tools/sync-crew.js` 로 `app.js` 의 `seedCrews()` 에서
 자동 생성합니다 — 손으로 고치지 마세요.
 
