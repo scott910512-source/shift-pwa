@@ -2,22 +2,21 @@
 // 4조 2교대 근무표 — iOS 홈/잠금화면 위젯 (Scriptable 전용)
 //
 //  설치: Scriptable 앱 → + → 이 파일 전체 붙여넣기 → 이름 "근무표"
-//        홈 화면 길게 누르기 → + → Scriptable → 위젯 크기 선택 →
+//        홈 화면 길게 누르기 → + → Scriptable → 크기 선택 →
 //        위젯 길게 누르기 → 위젯 편집 → Script: 근무표
 //
-//  인터넷 없이 동작합니다. 명단이 바뀌면 아래 CREW 만 고치면 됩니다.
-//  (웹앱과 같은 계산식이므로 결과가 항상 일치합니다)
+//  명단은 배포된 crew.json 을 받아 쓰므로, 명단이 바뀌어도 위젯을 다시
+//  붙여넣을 필요가 없습니다. 근무 패턴 계산은 이 스크립트 안에서 하므로
+//  인터넷이 없어도 동작합니다.
 // ============================================================
 
 const APP_URL = "https://scott910512-source.github.io/shift-pwa/";
 
 // ---------- 명단 ----------
-// 배포된 crew.json 을 받아 캐시한다. 명단이 바뀌어도 위젯을 다시 붙여넣을
-// 필요가 없다. 네트워크가 없으면 마지막으로 받은 값을, 그것도 없으면
-// 아래 FALLBACK 을 쓴다.
 const CREW_URL = APP_URL + "crew.json";
 const CACHE_FILE = "shift-crew.json";
 
+// 한 번도 명단을 받지 못했을 때만 쓰는 값
 const FALLBACK = {
   A: { leader: "노용수", factories: { "1": [], "2": ["하형만", "박성현", "진영욱"], "3": [] } },
   B: { leader: "조한석", factories: { "1": [], "2": ["안민호", "장예닮", "김재섭"], "3": [] } },
@@ -26,17 +25,17 @@ const FALLBACK = {
 };
 const PLANTS = ["1", "2", "3"];
 
-let CREW = FALLBACK;      // loadCrew() 가 채운다
+let CREW = FALLBACK;
 let CREW_SOURCE = "기본값";
 
 function normalizeCrew(raw) {
   const out = {};
   for (const t of ["A", "B", "C", "D"]) {
     const src = (raw && raw[t]) || {};
-    const fs_ = src.factories || {};
+    const fx = src.factories || {};
     const factories = {};
     for (const p of PLANTS) {
-      const arr = Array.isArray(fs_[p]) ? fs_[p] : [];
+      const arr = Array.isArray(fx[p]) ? fx[p] : [];
       factories[p] = arr.map(x => String(x == null ? "" : x).trim()).filter(Boolean);
     }
     out[t] = { leader: String(src.leader == null ? "" : src.leader).trim(), factories };
@@ -48,8 +47,7 @@ async function loadCrew() {
   const fm = FileManager.local();
   const path = fm.joinPath(fm.cacheDirectory(), CACHE_FILE);
 
-  // 1) 최신 명단 받아오기
-  try {
+  try {                                   // 1) 최신 명단
     const req = new Request(CREW_URL + "?t=" + Date.now());
     req.timeoutInterval = 8;
     const json = await req.loadJSON();
@@ -59,10 +57,9 @@ async function loadCrew() {
       CREW_SOURCE = "최신";
       return;
     }
-  } catch (e) { /* 오프라인 등 — 아래로 */ }
+  } catch (e) { /* 오프라인 등 */ }
 
-  // 2) 마지막으로 받아둔 명단
-  try {
+  try {                                   // 2) 마지막으로 받아둔 명단
     if (fm.fileExists(path)) {
       const json = JSON.parse(fm.readString(path));
       if (json && json.crews) {
@@ -73,8 +70,7 @@ async function loadCrew() {
     }
   } catch (e) { /* 아래로 */ }
 
-  // 3) 내장 기본값
-  CREW = normalizeCrew(FALLBACK);
+  CREW = normalizeCrew(FALLBACK);         // 3) 내장 기본값
   CREW_SOURCE = "기본값";
 }
 
@@ -89,11 +85,8 @@ const mod = (n, m) => ((n % m) + m) % m;
 function shiftOf(utcMidnight) {
   const n = Math.round((utcMidnight - ANCHOR) / DAY);
   const [day, night] = BLOCKS[mod(Math.floor(n / 3), 4)];
-  return {
-    day, night,
-    nth: mod(n, 3) + 1,
-    off: TEAMS.filter(t => t !== day && t !== night)
-  };
+  return { day, night, nth: mod(n, 3) + 1,
+           off: TEAMS.filter(t => t !== day && t !== night) };
 }
 
 // ---------- 한국 표준시 고정 ----------
@@ -124,7 +117,6 @@ function currentShift(now = Date.now()) {
   const kind = (p.h >= 8 && p.h < 20) ? "day" : "night";
   const srcKey = (kind === "night" && dawn) ? todayKey - DAY : todayKey;
   const s = shiftOf(srcKey);
-  // 다음 교대 시각 = 위젯 갱신 시점
   let boundary;
   if (p.h < 8) boundary = Date.UTC(p.y, p.m, p.d, 8) - KST;
   else if (p.h < 20) boundary = Date.UTC(p.y, p.m, p.d, 20) - KST;
@@ -134,14 +126,13 @@ function currentShift(now = Date.now()) {
 }
 
 const leaderOf = t => (CREW[t] && CREW[t].leader) || "";
-const countOf = t => PLANTS.reduce((n, p) => n + ((CREW[t] && CREW[t].factories[p]) || []).length, 0);
 const membersOf = (t, p) => (CREW[t] && CREW[t].factories[p]) || [];
 
 // ---------- 색 ----------
 const C_BG    = new Color("#0e1218");
 const C_FG    = new Color("#e8edf4");
-const C_MUTE  = new Color("#8b95a3");
-const C_DIM   = new Color("#5f6a78");
+const C_MUTE  = new Color("#98a3b1");
+const C_DIM   = new Color("#68737f");
 const C_DAY   = new Color("#f0ad3c");
 const C_NIGHT = new Color("#7d99f7");
 
@@ -164,56 +155,90 @@ function symbol(stack, name, size, color) {
     img.resizable = true;
     return img;
   } catch (e) {
-    return txt(stack, name === "sun.max.fill" ? "주" : "야", size - 2, color, { bold: true });
+    return txt(stack, name.indexOf("sun") === 0 ? "주" : "야", size - 2, color, { bold: true });
   }
 }
 
-// 한 교대 줄: [아이콘] 주간  C조   김민규
-function shiftRow(w, kind, team, opts = {}) {
+// ---------- 구성 요소 ----------
+
+// 고정폭 라벨 — 공장별 이름 시작 위치를 맞춘다
+function label(row, text, w, size, color) {
+  const box = row.addStack();
+  box.size = new Size(w, 0);
+  txt(box, text, size, color);
+  return box;
+}
+
+// 공장 한 줄:  1공장  임재훈 조은비 황선우 남기훈
+function plantRow(w, team, plant, f) {
+  const row = w.addStack();
+  row.centerAlignContent();
+  row.spacing = 5;
+  label(row, plant + "공장", f.labelW, f.label, C_DIM);
+  const list = membersOf(team, plant);
+  txt(row, list.length ? list.join(" ") : "미등록", f.name,
+      list.length ? C_FG : C_DIM, { lineLimit: 1, minScale: 0.5 });
+  row.addSpacer();
+  return row;
+}
+
+// 교대 제목 줄:  ☀ 주간 C조 · 김민규            ● 근무중
+function shiftHead(w, kind, team, f, opts = {}) {
   const isDay = kind === "day";
   const color = isDay ? C_DAY : C_NIGHT;
   const row = w.addStack();
   row.centerAlignContent();
-  row.spacing = 5;
-
-  symbol(row, isDay ? "sun.max.fill" : "moon.fill", opts.iconSize || 12, color);
-  txt(row, isDay ? "주간" : "야간", opts.labelSize || 12, C_MUTE);
-  txt(row, team + "조", opts.teamSize || 15, color, { bold: true });
-
-  if (opts.showLeader) {
-    row.addSpacer();
-    const lead = leaderOf(team);
-    txt(row, lead || "미등록", opts.leaderSize || 13, lead ? C_FG : C_DIM);
-  }
-  if (opts.now) {
-    row.addSpacer(4);
-    txt(row, "● 근무중", 9.5, color);
-  }
-  if (!opts.showLeader && !opts.now) row.addSpacer();
-  return row;
-}
-
-function headerRow(w, cur, opts = {}) {
-  const row = w.addStack();
-  row.centerAlignContent();
-  txt(row, labelOf(cur.todayKey), opts.size || 12, C_MUTE, { mono: true });
-  row.addSpacer();
-  const s = shiftOf(cur.todayKey);
-  txt(row, `${s.nth}일차`, (opts.size || 12) - 1, C_DIM, { mono: true });
-  return row;
-}
-
-function offRow(w, offs, size = 11) {
-  const row = w.addStack();
-  row.centerAlignContent();
   row.spacing = 4;
-  txt(row, "휴무", size, C_DIM);
-  txt(row, offs.join(" · "), size, C_MUTE, { bold: true });
+
+  symbol(row, isDay ? "sun.max.fill" : "moon.fill", f.icon, color);
+  txt(row, isDay ? "주간" : "야간", f.kind, C_MUTE);
+  txt(row, team + "조", f.team, color, { bold: true });
+  txt(row, "·", f.kind, C_DIM);
+  const lead = leaderOf(team);
+  txt(row, lead || "조장 미등록", f.leader, lead ? C_FG : C_DIM, { bold: true });
+
   row.addSpacer();
+  if (opts.now) txt(row, "● 근무중", f.badge, color);
+  else txt(row, isDay ? "08:00~" : "20:00~", f.badge, C_DIM, { mono: true });
+  return row;
+}
+
+// 교대 한 덩어리 = 제목 + 1·2·3공장
+function shiftBlock(w, kind, team, f, opts = {}) {
+  shiftHead(w, kind, team, f, opts);
+  w.addSpacer(f.gapHead);
+  PLANTS.forEach((p, i) => {
+    if (i) w.addSpacer(f.gapRow);
+    plantRow(w, team, p, f);
+  });
+}
+
+// 맨 윗줄:  8/30 (일)  1일차  휴무 B·D            19:42
+function topRow(w, cur, offs, f) {
+  const row = w.addStack();
+  row.centerAlignContent();
+  row.spacing = 5;
+  const s = shiftOf(cur.todayKey);
+  txt(row, labelOf(cur.todayKey), f.date, C_FG, { mono: true, bold: true });
+  txt(row, `${s.nth}일차`, f.meta, C_DIM, { mono: true });
+  txt(row, "휴무 " + offs.join("·"), f.meta, C_MUTE);
+  row.addSpacer();
+  const p = kstParts();
+  txt(row, `${pad2(p.h)}:${pad2(p.mi)}`, f.date, C_MUTE, { mono: true });
   return row;
 }
 
 // ---------- 위젯 ----------
+// 크기별 글자/여백. medium 에 9줄이 들어가도록 촘촘하게 잡았다.
+const FONTS = {
+  small:  { date: 11, meta: 9,   icon: 11, kind: 10,   team: 15, leader: 11, badge: 9,
+            label: 8,    name: 9,  labelW: 24, gapHead: 3, gapRow: 2 },
+  medium: { date: 11, meta: 9.5, icon: 12, kind: 10.5, team: 14, leader: 12, badge: 9.5,
+            label: 8.5,  name: 10, labelW: 27, gapHead: 4, gapRow: 3 },
+  large:  { date: 14, meta: 12,  icon: 15, kind: 13,   team: 19, leader: 15, badge: 11.5,
+            label: 10.5, name: 13, labelW: 34, gapHead: 6, gapRow: 4 }
+};
+
 function buildWidget(family, now = Date.now()) {
   const w = new ListWidget();
   w.backgroundColor = C_BG;
@@ -225,39 +250,48 @@ function buildWidget(family, now = Date.now()) {
   const nightKey = cur.dawn ? tKey - DAY : tKey;
   const nightS = shiftOf(nightKey);
   const offs = TEAMS.filter(t => t !== dayS.day && t !== nightS.night);
+  const f = FONTS[family] || FONTS.medium;
 
-  // 교대 시각에 맞춰 갱신 요청
-  w.refreshAfterDate = new Date(cur.boundary);
+  w.refreshAfterDate = new Date(cur.boundary);   // 교대 시각에 갱신 요청
 
+  // 작은 위젯은 폭이 좁아 이름을 다 넣으면 못 읽는다 → 조 · 조장까지
   if (family === "small") {
-    w.setPadding(12, 12, 12, 12);
-    headerRow(w, cur, { size: 11 });
-    w.addSpacer(8);
-    shiftRow(w, "day", dayS.day, { now: cur.kind === "day", teamSize: 17, iconSize: 13 });
+    w.setPadding(11, 11, 11, 11);
+    const s = shiftOf(tKey);
+    const top = w.addStack();
+    top.centerAlignContent();
+    txt(top, labelOf(tKey), f.date, C_FG, { mono: true, bold: true });
+    top.addSpacer();
+    txt(top, `${s.nth}일차`, f.meta, C_DIM, { mono: true });
+    w.addSpacer(7);
+    shiftHead(w, "day", dayS.day, f, { now: cur.kind === "day" });
     w.addSpacer(5);
-    shiftRow(w, "night", nightS.night, { now: cur.kind === "night", teamSize: 17, iconSize: 13 });
-    w.addSpacer(8);
-    offRow(w, offs, 10.5);
+    shiftHead(w, "night", nightS.night, f, { now: cur.kind === "night" });
+    w.addSpacer();
+    const off = w.addStack();
+    off.centerAlignContent();
+    off.spacing = 4;
+    txt(off, "휴무", f.meta, C_DIM);
+    txt(off, offs.join(" · "), f.meta, C_MUTE, { bold: true });
+    off.addSpacer();
     return w;
   }
 
   if (family === "large") {
     w.setPadding(14, 14, 14, 14);
-    headerRow(w, cur, { size: 13 });
-    w.addSpacer(9);
-    shiftRow(w, "day", dayS.day, { showLeader: true, now: cur.kind === "day", teamSize: 18, iconSize: 14, labelSize: 13 });
-    w.addSpacer(3);
-    plantLine(w, dayS.day);
-    w.addSpacer(9);
-    shiftRow(w, "night", nightS.night, { showLeader: true, now: cur.kind === "night", teamSize: 18, iconSize: 14, labelSize: 13 });
-    w.addSpacer(3);
-    plantLine(w, nightS.night);
-    w.addSpacer(9);
-    offRow(w, offs, 12);
+    topRow(w, cur, offs, f);
+    w.addSpacer(10);
+    shiftBlock(w, "day", dayS.day, f, { now: cur.kind === "day" });
+    w.addSpacer(11);
+    shiftBlock(w, "night", nightS.night, f, { now: cur.kind === "night" });
+    if (cur.dawn) {
+      w.addSpacer(6);
+      txt(w, `야간 ${nightS.night}조는 어제 20:00 시작 · 오늘 08:00 종료`, 10.5, C_DIM, { lineLimit: 2 });
+    }
     w.addSpacer(10);
     txt(w, "다가오는 근무", 10.5, C_DIM);
     w.addSpacer(4);
-    for (let i = 1; i <= 5; i++) {
+    for (let i = 1; i <= 4; i++) {
       const k = tKey + i * DAY;
       const s = shiftOf(k);
       const r = w.addStack();
@@ -272,37 +306,18 @@ function buildWidget(family, now = Date.now()) {
     return w;
   }
 
-  // medium (기본)
-  w.setPadding(13, 14, 13, 14);
-  headerRow(w, cur, { size: 12.5 });
-  w.addSpacer(9);
-  shiftRow(w, "day", dayS.day, { showLeader: true, now: cur.kind === "day", teamSize: 17, iconSize: 13 });
+  // medium — 날짜/시간 + 주간(조장·1·2·3공장) + 야간(조장·1·2·3공장)
+  w.setPadding(9, 12, 9, 12);
+  topRow(w, cur, offs, f);
   w.addSpacer(6);
-  shiftRow(w, "night", nightS.night, { showLeader: true, now: cur.kind === "night", teamSize: 17, iconSize: 13 });
-  w.addSpacer(9);
-  offRow(w, offs, 11.5);
+  shiftBlock(w, "day", dayS.day, f, { now: cur.kind === "day" });
+  w.addSpacer(7);
+  shiftBlock(w, "night", nightS.night, f, { now: cur.kind === "night" });
   if (cur.dawn) {
     w.addSpacer(4);
-    txt(w, `야간 ${nightS.night}조는 어제 20:00 시작 · 오늘 08:00 종료`, 9.5, C_DIM, { lineLimit: 2 });
+    txt(w, `야간 ${nightS.night}조는 어제 20:00 시작`, 9, C_DIM);
   }
   return w;
-}
-
-// 공장별 인원 한 줄 (large 전용)
-function plantLine(w, team) {
-  const row = w.addStack();
-  row.spacing = 8;
-  PLANTS.forEach(p => {
-    const list = membersOf(team, p);
-    const col = row.addStack();
-    col.layoutVertically();
-    col.spacing = 1;
-    txt(col, `${p}공장`, 9.5, C_DIM);
-    txt(col, list.length ? list.join(" ") : "미등록",
-        11, list.length ? C_FG : C_DIM, { lineLimit: 3, minScale: 0.7 });
-  });
-  row.addSpacer();
-  return row;
 }
 
 // ---------- 실행 ----------
