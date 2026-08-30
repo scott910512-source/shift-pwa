@@ -307,49 +307,59 @@
     return v;
   }
 
-  function buildShiftCard(kind, team, nth, opt) {
+  // 공장 3열 (1공장 · 2공장 · 3공장 가로 배치)
+  function buildPlantCols(team) {
+    var wrap = el('div', 'wb-plants');
+    PLANTS.forEach(function (p) {
+      var list = membersOf(team, p.key);
+      var col = el('div', 'pcol');
+      var t = el('div', 'pt');
+      t.appendChild(el('span', null, p.label));
+      t.appendChild(el('span', 'cnt', list.length ? list.length + '명' : '0명'));
+      col.appendChild(t);
+      var ul = el('ul', 'pnames' + (list.length ? ' sel' : ' none'));
+      if (list.length) list.forEach(function (n) { ul.appendChild(el('li', null, n)); });
+      else ul.appendChild(el('li', null, '미등록'));
+      col.appendChild(ul);
+      wrap.appendChild(col);
+    });
+    return wrap;
+  }
+
+  // 주간/야간 근무 블록 — 가로 풀 너비
+  function buildShiftBlock(kind, team, nth, opt) {
     opt = opt || {};
     var isDay = kind === 'day';
-    var card = el('article', 'scard ' + (isDay ? 'day' : 'night'));
+    var bl = el('section', 'wblock ' + (isDay ? 'day' : 'night'));
 
-    var top = el('div', 'sc-top');
+    var hd = el('div', 'wb-hd');
     var orb = el('span', 'orb');
     orb.appendChild(icon(isDay ? 'sun' : 'moon'));
-    top.appendChild(orb);
-    var id = el('span', 'sc-id');
-    id.appendChild(el('span', 'sc-team', team));
-    id.appendChild(el('span', 'sc-kind', isDay ? '주간' : '야간'));
-    top.appendChild(id);
-    if (opt.now) top.appendChild(el('span', 'bdg live', '근무 중'));
-    else if (nth === 3) top.appendChild(el('span', 'bdg last', '막날'));
-    card.appendChild(top);
+    hd.appendChild(orb);
+    var ttl = el('div', 'wb-ttl');
+    ttl.appendChild(el('span', 'wb-kind', isDay ? '주간근무' : '야간근무'));
+    ttl.appendChild(el('span', 'wb-team', team + '조'));
+    hd.appendChild(ttl);
+    if (opt.now) hd.appendChild(el('span', 'bdg live', '근무 중'));
+    bl.appendChild(hd);
 
-    card.appendChild(el('div', 'sc-time', isDay ? '08:00 – 20:00' : '20:00 – 08:00'));
+    var sub = el('div', 'wb-sub');
+    sub.appendChild(el('span', 'wb-time', isDay ? '08:00 – 20:00' : '20:00 – 08:00'));
+    sub.appendChild(el('span', null, nth + '일차'));
+    if (nth === 3) sub.appendChild(el('span', 'bdg last', '막날'));
+    if (opt.startNote) sub.appendChild(el('span', 'bdg soon', opt.startNote));
+    bl.appendChild(sub);
 
-    var meta = el('div', 'sc-meta');
-    meta.appendChild(el('span', null, nth + '일차'));
-    if (opt.now && nth === 3) meta.appendChild(el('span', 'bdg last', '막날'));
-    if (opt.startNote) meta.appendChild(el('span', 'bdg soon', opt.startNote));
-    card.appendChild(meta);
+    if (opt.note) bl.appendChild(el('div', 'wb-note', opt.note));
 
-    if (opt.note) card.appendChild(el('div', 'sc-note', opt.note));
-
-    card.appendChild(el('div', 'sc-div'));
-    card.appendChild(el('div', 'sc-rt', '조원 현황'));
-
-    var lr = el('div', 'sc-row lead');
-    lr.appendChild(el('span', 'k', '교대조장'));
+    var lead = el('div', 'wb-lead');
+    lead.appendChild(el('span', 'k', '교대조장'));
     var ln = leaderOf(team);
-    lr.appendChild(ln ? el('span', 'v sel', ln) : el('span', 'v none', '미등록'));
-    card.appendChild(lr);
+    lead.appendChild(ln ? el('span', 'v sel', ln) : el('span', 'v none', '미등록'));
+    bl.appendChild(lead);
 
-    PLANTS.forEach(function (p) {
-      var r = el('div', 'sc-row');
-      r.appendChild(el('span', 'k', p.label));
-      r.appendChild(namesEl(membersOf(team, p.key)));
-      card.appendChild(r);
-    });
-    return card;
+    bl.appendChild(buildPlantCols(team));
+    return bl;
   }
 
   /* ========== 홈 ========== */
@@ -377,11 +387,11 @@
 
     var box = $('homeCards');
     clear(box);
-    box.appendChild(buildShiftCard('day', dayS.day, dayS.nth, {
+    box.appendChild(buildShiftBlock('day', dayS.day, dayS.nth, {
       now: cur.kind === 'day',
       startNote: cur.kind === 'day' ? '' : '08:00 시작'
     }));
-    box.appendChild(buildShiftCard('night', nightS.night, nightS.nth, {
+    box.appendChild(buildShiftBlock('night', nightS.night, nightS.nth, {
       now: cur.kind === 'night',
       startNote: cur.kind === 'night' ? '' : '20:00 시작',
       note: cur.dawn ? ('어제 ' + fmtMDShort(nightKey) + ' 20:00 시작 · 오늘 08:00 종료') : ''
@@ -475,30 +485,27 @@
 
   function buildSheetBlock(kind, team) {
     var isDay = kind === 'day';
-    var w = el('div', 'sb ' + (isDay ? 'day' : 'night'));
-    var hd = el('div', 'sb-hd');
+    var bl = el('section', 'wblock ' + (isDay ? 'day' : 'night'));
+
+    var hd = el('div', 'wb-hd');
     var orb = el('span', 'orb');
     orb.appendChild(icon(isDay ? 'sun' : 'moon'));
     hd.appendChild(orb);
-    hd.appendChild(el('span', 'sb-t', (isDay ? '주간' : '야간') + ' · ' + team + '조'));
-    hd.appendChild(el('span', 'sb-time', isDay ? '08:00–20:00' : '20:00–08:00'));
-    w.appendChild(hd);
+    var ttl = el('div', 'wb-ttl');
+    ttl.appendChild(el('span', 'wb-kind', isDay ? '주간근무' : '야간근무'));
+    ttl.appendChild(el('span', 'wb-team', team + '조'));
+    hd.appendChild(ttl);
+    hd.appendChild(el('span', 'wb-time', isDay ? '08:00–20:00' : '20:00–08:00'));
+    bl.appendChild(hd);
 
-    var lg = el('div', 'sg lead');
-    lg.appendChild(el('div', 'sg-t', '교대조장'));
+    var lead = el('div', 'wb-lead');
+    lead.appendChild(el('span', 'k', '교대조장'));
     var ln = leaderOf(team);
-    lg.appendChild(el('div', 'sg-v' + (ln ? ' sel' : ' none'), ln || '미등록'));
-    w.appendChild(lg);
+    lead.appendChild(ln ? el('span', 'v sel', ln) : el('span', 'v none', '미등록'));
+    bl.appendChild(lead);
 
-    PLANTS.forEach(function (p) {
-      var list = membersOf(team, p.key);
-      var g = el('div', 'sg');
-      g.appendChild(el('div', 'sg-t', p.label));
-      g.appendChild(el('div', 'sg-v' + (list.length ? ' sel' : ' none'),
-        list.length ? list.join(' · ') : '미등록'));
-      w.appendChild(g);
-    });
-    return w;
+    bl.appendChild(buildPlantCols(team));
+    return bl;
   }
 
   function renderSheet() {
@@ -506,8 +513,10 @@
     $('sheetTitle').textContent = fmtMD(sheetKey);
     var body = $('sheetBody');
     clear(body);
-    body.appendChild(buildSheetBlock('day', s.day));
-    body.appendChild(buildSheetBlock('night', s.night));
+    var wrap = el('div', 'wblocks');
+    wrap.appendChild(buildSheetBlock('day', s.day));
+    wrap.appendChild(buildSheetBlock('night', s.night));
+    body.appendChild(wrap);
     var off = el('div', 'offbar');
     off.appendChild(el('span', 'k', '휴무 조'));
     s.off.forEach(function (t) { off.appendChild(el('span', 'ot', t)); });

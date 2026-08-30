@@ -150,58 +150,84 @@ svg{ width:100%; height:100%; fill:none; stroke:currentColor; stroke-width:1.8;
 /* ---------- 섹션 제목 ---------- */
 .sect{ margin:0 0 9px; font-size:15px; font-weight:700; letter-spacing:-.01em; }
 
-/* ---------- 근무 카드 (2열) ---------- */
-.scards{ display:grid; grid-template-columns:1fr 1fr; gap:9px; align-items:stretch; }
-@media (max-width:379px){ .scards{ grid-template-columns:1fr; } }
+/* ---------- 근무 블록 (가로 풀 너비) ---------- */
+.wblocks{ display:flex; flex-direction:column; gap:11px; }
 
-.scard{
-  background:var(--card); border:1px solid var(--line); border-radius:var(--r);
-  padding:12px 11px; display:flex; flex-direction:column; min-width:0;
+.wblock{
+  background:var(--card); border:1px solid var(--line);
+  border-radius:var(--r); overflow:hidden;
 }
-.scard.day{ border-color:var(--day-edge); }
-.scard.night{ border-color:var(--night-edge); }
+.wblock.day{ border-color:var(--day-edge); }
+.wblock.night{ border-color:var(--night-edge); }
 
-.sc-top{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-.orb{ width:38px; height:38px; flex:0 0 38px; border-radius:50%; display:grid; place-items:center; }
-.orb svg{ width:19px; height:19px; }
-.scard.day .orb{ background:var(--day-orb); color:var(--day); }
-.scard.night .orb{ background:var(--night-orb); color:var(--night); }
+/* 상단 큰 제목줄 */
+.wb-hd{
+  display:flex; align-items:center; gap:10px;
+  padding:13px 14px 11px;
+  border-bottom:1px solid var(--line);
+}
+.wblock.day .wb-hd{ background:linear-gradient(to right, var(--day-bg), transparent 72%); }
+.wblock.night .wb-hd{ background:linear-gradient(to right, var(--night-bg), transparent 72%); }
 
-.sc-id{ display:flex; align-items:baseline; gap:5px; min-width:0; }
-.sc-team{ font-family:var(--fm); font-size:27px; font-weight:700; line-height:1; }
-.scard.day .sc-team{ color:var(--day); }
-.scard.night .sc-team{ color:var(--night); }
-.sc-kind{ font-size:13.5px; font-weight:600; color:var(--fg-2); }
+.orb{ width:40px; height:40px; flex:0 0 40px; border-radius:50%; display:grid; place-items:center; }
+.orb svg{ width:20px; height:20px; }
+.wblock.day .orb{ background:var(--day-orb); color:var(--day); }
+.wblock.night .orb{ background:var(--night-orb); color:var(--night); }
+
+.wb-ttl{ display:flex; align-items:baseline; gap:9px; min-width:0; flex:1; }
+.wb-kind{ font-size:20px; font-weight:700; letter-spacing:-.02em; }
+.wblock.day .wb-kind{ color:var(--day); }
+.wblock.night .wb-kind{ color:var(--night); }
+.wb-team{ font-family:var(--fm); font-size:23px; font-weight:700; line-height:1; }
+.wblock.day .wb-team{ color:var(--day); }
+.wblock.night .wb-team{ color:var(--night); }
+.wb-time{ font-family:var(--fm); font-size:12px; color:var(--fg-2);
+          font-variant-numeric:tabular-nums; white-space:nowrap; }
 
 .bdg{
-  font-size:10px; font-weight:600; letter-spacing:-.01em;
-  padding:2.5px 6px; border-radius:5px; white-space:nowrap;
+  font-size:10.5px; font-weight:600; letter-spacing:-.01em;
+  padding:3px 7px; border-radius:5px; white-space:nowrap;
   border:1px solid var(--line-3); color:var(--fg-2);
 }
 .bdg.live{ border-color:var(--day-edge); background:var(--day-bg); color:var(--day); }
-.scard.night .bdg.live{ border-color:var(--night-edge); background:var(--night-bg); color:var(--night); }
+.wblock.night .bdg.live{ border-color:var(--night-edge); background:var(--night-bg); color:var(--night); }
 .bdg.last{ border-color:var(--red-edge); color:var(--red); }
 .bdg.soon{ border-color:var(--night-edge); background:var(--night-bg); color:var(--night); }
-.sc-top .bdg{ margin-left:auto; }
 
-.sc-time{ font-family:var(--fm); font-size:12.5px; color:var(--fg-2);
-          font-variant-numeric:tabular-nums; margin-top:9px; }
-.sc-meta{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:6px;
-          font-size:12.5px; color:var(--fg-2); }
-.sc-note{ margin-top:6px; font-size:11px; color:var(--fg-3); line-height:1.45; }
+/* 부제목 줄: 시간 · 일차 · 배지 */
+.wb-sub{
+  display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+  padding:8px 14px; border-bottom:1px solid var(--line-2);
+  font-size:12.5px; color:var(--fg-2);
+}
+.wb-note{ padding:7px 14px; font-size:11.5px; color:var(--fg-3);
+          border-bottom:1px solid var(--line-2); }
 
-.sc-div{ height:1px; background:var(--line); margin:11px 0 9px; }
-.sc-rt{ font-size:11px; color:var(--fg-3); margin-bottom:6px; }
+/* 교대조장 (풀 너비 한 줄) */
+.wb-lead{
+  display:flex; align-items:baseline; gap:12px;
+  padding:11px 14px; border-bottom:1px solid var(--line);
+  background:var(--card-2);
+}
+.wb-lead .k{ font-size:11.5px; color:var(--fg-3); white-space:nowrap; }
+.wb-lead .v{ font-size:18px; font-weight:700; letter-spacing:-.01em; }
+.wblock.day .wb-lead .v{ color:var(--day); }
+.wblock.night .wb-lead .v{ color:var(--night); }
+.wb-lead .v.none{ color:var(--fg-3); font-size:14px; font-weight:400; }
 
-.sc-row{ display:grid; grid-template-columns:46px 1fr; gap:6px; align-items:baseline;
-         padding:3px 0; min-width:0; }
-.sc-row .k{ font-size:11px; color:var(--fg-3); white-space:nowrap; }
-.sc-row .v{ font-size:13px; line-height:1.45; word-break:keep-all; min-width:0; }
-.sc-row.lead .v{ font-size:14.5px; font-weight:700; }
-.scard.day .sc-row.lead .v{ color:var(--day); }
-.scard.night .sc-row.lead .v{ color:var(--night); }
-.v .sp{ color:var(--fg-3); padding:0 1px; }
-.v.none{ color:var(--fg-3); font-size:12px; }
+/* 1·2·3공장 가로 3열 */
+.wb-plants{ display:grid; grid-template-columns:repeat(3,1fr); }
+.pcol{ padding:10px 8px 12px; min-width:0; border-left:1px solid var(--line-2); }
+.pcol:first-child{ border-left:0; }
+.pt{
+  display:flex; align-items:baseline; justify-content:center; gap:4px;
+  font-size:11.5px; font-weight:600; color:var(--fg-2);
+  padding-bottom:7px; margin-bottom:7px; border-bottom:1px solid var(--line-2);
+}
+.pt .cnt{ font-family:var(--fm); font-size:10px; color:var(--fg-3); font-weight:400; }
+.pnames{ margin:0; padding:0; display:flex; flex-direction:column; gap:4px; text-align:center; }
+.pnames li{ list-style:none; font-size:14px; line-height:1.35; word-break:keep-all; }
+.pnames.none li{ color:var(--fg-3); font-size:12px; }
 
 /* ---------- 휴무 줄 ---------- */
 .offbar{
@@ -380,8 +406,8 @@ textarea.inp{ min-height:120px; padding:10px 12px; font-family:var(--fm);
 .sb-t{ font-size:14.5px; font-weight:700; }
 .sb.day .sb-t, .sb.day .orb{ color:var(--day); }
 .sb.night .sb-t, .sb.night .orb{ color:var(--night); }
-.sb .orb{ width:30px; height:30px; flex:0 0 30px; }
-.sb .orb svg{ width:16px; height:16px; }
+.sb .orb{ width:32px; height:32px; flex:0 0 32px; }
+.sb .orb svg{ width:17px; height:17px; }
 .sb.day .orb{ background:var(--day-orb); }
 .sb.night .orb{ background:var(--night-orb); }
 .sb-time{ margin-left:auto; font-family:var(--fm); font-size:11px; color:var(--fg-3); }
