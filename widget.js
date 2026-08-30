@@ -138,6 +138,7 @@ const C_NIGHT = new Color("#7d99f7");
 const C_CHIP  = new Color("#1c2331");
 const C_LINE  = new Color("#2a3444");
 const C_LINE2 = new Color("#39445a");
+const C_DAY2  = new Color("#c9a25a");   // 2공장 숫자 표시
 
 function txt(stack, s, size, color, opts = {}) {
   const t = stack.addText(s);
@@ -182,15 +183,14 @@ function widgetWidth(family) {
 }
 
 // 공장 라벨 칩
-function chip(row, text, f) {
+// 공장 표시. "1공장" 칩은 폭을 32pt 나 먹어서 이름이 들어갈 자리를 잡아먹는다.
+// 숫자만 남기면 12pt 로 줄어 이름을 훨씬 크게 쓸 수 있고, 위에서부터
+// 1·2·3공장 순서가 고정이라 구분도 유지된다.
+function plantMark(row, plant, f, big) {
   const box = row.addStack();
-  box.backgroundColor = C_CHIP;
-  box.cornerRadius = 4;
-  box.setPadding(2, 4, 2, 4);
+  box.size = new Size(f.labelW, 0);
   box.centerAlignContent();
-  // 폭을 고정하면 "2공장" 이 "2…" 로 잘린다. 라벨이 모두 세 글자라
-  // 내용에 맞춰도 세 줄이 저절로 정렬된다.
-  txt(box, text, f.label, C_MUTE, { minScale: 0.8 });
+  txt(box, plant, f.label, big ? C_DAY2 : C_DIM, { bold: big });
   return box;
 }
 
@@ -198,10 +198,11 @@ function chip(row, text, f) {
 function plantRow(col, team, plant, f) {
   const row = col.addStack();
   row.centerAlignContent();
-  row.spacing = 5;
-  chip(row, plant + "공장", f);
+  row.spacing = 4;
+  const big = (plant === BIG_PLANT);
+  plantMark(row, plant, f, big);
   const list = membersOf(team, plant);
-  const size = (plant === BIG_PLANT) ? f.nameBig : f.name;   // 2공장만 크게
+  const size = big ? f.nameBig : f.name;   // 2공장만 크게
   txt(row, list.length ? list.join(" ") : "미등록", size,
       list.length ? C_FG : C_DIM, { lineLimit: 1, minScale: 0.45 });
   row.addSpacer();
@@ -297,16 +298,16 @@ const BIG_PLANT = "2";
 // 두고, large 는 남는 높이를 제목과 아래 목록에 쓴다.
 const FONTS = {
   small:  { date: 11.5, meta: 9.5,  icon: 12, kind: 10,   team: 15,   leader: 12,   badge: 9,
-            label: 8.5,  name: 9.5,  nameBig: 11,   gapHead: 4, gapRow: 3, divH: 0,
+            label: 8.5,  name: 10,   nameBig: 12,   labelW: 10, gapHead: 4, gapRow: 3, divH: 0,
             pad: 11, gap: 0 },
   medium: { date: 12.5, meta: 10,   icon: 12, kind: 10,   team: 15,   leader: 12.5, badge: 9,
-            label: 8,    name: 10.5, nameBig: 13.5,   gapHead: 5, gapRow: 5, divH: 88,
+            label: 8.5,  name: 11,   nameBig: 14,   labelW: 11, gapHead: 5, gapRow: 5, divH: 88,
             pad: 9,  gap: 7 },
   large:  { date: 14.5, meta: 11.5, icon: 14, kind: 11.5, team: 17,   leader: 14,   badge: 10.5,
-            label: 8.5,  name: 11,   nameBig: 14,   gapHead: 6, gapRow: 6, divH: 98,
+            label: 9,    name: 12,   nameBig: 15,   labelW: 12, gapHead: 6, gapRow: 6, divH: 98,
             pad: 10, gap: 8 },
   extraLarge: { date: 16, meta: 13, icon: 17, kind: 14,   team: 21,   leader: 16.5, badge: 12.5,
-            label: 11.5, name: 14,   nameBig: 17.5, gapHead: 8, gapRow: 8, divH: 122,
+            label: 11,   name: 15,   nameBig: 18.5, labelW: 14, gapHead: 8, gapRow: 8, divH: 122,
             pad: 13, gap: 12 }
 };
 
