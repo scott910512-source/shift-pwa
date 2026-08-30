@@ -265,6 +265,10 @@ function topRow(w, cur, offs, f) {
 }
 
 // ---------- 위젯 ----------
+// 위젯 갱신 희망 간격. iOS 가 정확히 지켜주진 않지만, 이 값보다 이르게는
+// 갱신하지 않는다. 너무 짧게 잡으면 iOS 가 갱신 횟수를 줄여버린다.
+const REFRESH_MS = 15 * 60 * 1000;
+
 const FONTS = {
   small:  { date: 11,   meta: 9,   icon: 11, kind: 10,   team: 15, leader: 11,   badge: 9,
             label: 8,   name: 9,    labelW: 30, gapHead: 3, gapRow: 2, divH: 0 },
@@ -289,7 +293,10 @@ function buildWidget(family, now = Date.now()) {
   const offs = TEAMS.filter(t => t !== dayS.day && t !== nightS.night);
   const f = FONTS[family] || FONTS.medium;
 
-  w.refreshAfterDate = new Date(cur.boundary);   // 교대 시각에 갱신 요청
+  // refreshAfterDate 는 "이 시각 전에는 갱신하지 말라"는 뜻이다. 교대 시각만
+  // 넣으면 최대 12시간 동안 갱신이 막혀 화면이 멈춘 것처럼 보인다.
+  // 다음 교대 시각과 15분 뒤 중 이른 쪽을 넣어 자주 갱신되게 한다.
+  w.refreshAfterDate = new Date(Math.min(cur.boundary, now + REFRESH_MS));
 
   // 작은 위젯은 2단으로 나눌 폭이 없다 → 조·조장만 세로로
   if (family === "small") {
