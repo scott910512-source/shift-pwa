@@ -248,8 +248,23 @@ function divider(row, h) {
   return d;
 }
 
-// 맨 윗줄:  8/30 (일) │ 1일차  휴무 B·D                    10:34
-function topRow(w, cur, offs, f) {
+// iOS 가 스스로 갱신해 주는 상대 시각. 위젯을 다시 그리지 않아도 "방금 →
+// 5분 전 → 1시간 전" 으로 계속 살아 있어, 화면이 얼마나 오래됐는지 알 수 있다.
+// (위젯에 살아 있는 시계를 그리는 방법은 iOS 에 없다. 상대 시각이 유일하다.)
+function liveAgo(row, ts, f) {
+  try {
+    const d = row.addDate(new Date(ts));
+    d.applyRelativeStyle();
+    d.font = Font.systemFont(f.meta);
+    d.textColor = C_DIM;
+    return d;
+  } catch (e) {
+    return null;   // 구버전 Scriptable 대비
+  }
+}
+
+// 맨 윗줄:  8/30 (일) │ 1일차  휴무 B·D              10:34 · 3분 전
+function topRow(w, cur, offs, f, now) {
   const row = w.addStack();
   row.centerAlignContent();
   row.spacing = 6;
@@ -259,8 +274,10 @@ function topRow(w, cur, offs, f) {
   txt(row, `${s.nth}일차`, f.meta, C_DIM);
   txt(row, "휴무 " + offs.join("·"), f.meta, C_MUTE);
   row.addSpacer();
-  const p = kstParts();
+  const p = kstParts(now);
   txt(row, `${pad2(p.h)}:${pad2(p.mi)}`, f.date, C_MUTE, { mono: true });
+  row.spacing = 5;
+  liveAgo(row, now, f);
   return row;
 }
 
@@ -306,6 +323,8 @@ function buildWidget(family, now = Date.now()) {
     txt(top, labelOf(tKey), f.date, C_FG, { bold: true });
     top.addSpacer();
     txt(top, `${dayS.nth}일차`, f.meta, C_DIM);
+    top.spacing = 5;
+    liveAgo(top, now, f);
     w.addSpacer(7);
     shiftHead(w, "day", dayS.day, f, { now: cur.kind === "day" });
     w.addSpacer(5);
@@ -324,7 +343,7 @@ function buildWidget(family, now = Date.now()) {
   const pad = family === "medium" ? 11 : 14;
   w.setPadding(pad, pad + 1, pad, pad + 1);
 
-  topRow(w, cur, offs, f);
+  topRow(w, cur, offs, f, now);
   w.addSpacer(family === "medium" ? 9 : 12);
 
   const body = w.addStack();
