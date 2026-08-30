@@ -50,6 +50,15 @@
 직접 고친 기기는 설정 → 백업/복원 → `기본 명단으로 되돌리기` 로도 맞출 수 있습니다.
 현재 상태는 설정 → 앱 설정의 `기본 명단 버전` / `현재 명단` 에서 확인합니다.
 
+## 홈 화면 위젯 (아이폰)
+
+`widget.js` 를 Scriptable 앱에 붙여넣으면 홈/잠금 화면 위젯으로 오늘 근무조를
+볼 수 있습니다. 설치와 명단 배포 절차는 [WIDGET.md](WIDGET.md) 참고.
+
+위젯은 `crew.json` 을 받아 쓰므로 명단이 바뀌어도 다시 설치할 필요가 없습니다.
+`crew.json` 은 `node tools/sync-crew.js` 로 `app.js` 의 `seedCrews()` 에서
+자동 생성합니다 — 손으로 고치지 마세요.
+
 ## 배포 (GitHub Pages)
 1. `icons/` 에 아이콘 PNG 3개를 넣습니다 (`icons/README.md` 참고).
 2. Settings → Pages → Source: `main` 브랜치 루트.

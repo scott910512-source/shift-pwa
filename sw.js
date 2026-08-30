@@ -4,7 +4,7 @@
    갱신하려면 CACHE_VERSION 숫자를 올리세요.
    ============================================================ */
 
-var CACHE_VERSION = 'v5';
+var CACHE_VERSION = 'v6';
 var CACHE_NAME = 'shift-shell-' + CACHE_VERSION;
 var FONT_CACHE = 'shift-fonts-' + CACHE_VERSION;
 
@@ -15,6 +15,7 @@ var SHELL = [
   './app.css',
   './app.js',
   './manifest.json',
+  './crew.json',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/icon-maskable-512.png'
