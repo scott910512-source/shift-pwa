@@ -187,9 +187,10 @@ function chip(row, text, f) {
   box.backgroundColor = C_CHIP;
   box.cornerRadius = 4;
   box.setPadding(2, 4, 2, 4);
-  box.size = new Size(f.labelW, 0);
   box.centerAlignContent();
-  txt(box, text, f.label, C_MUTE);
+  // 폭을 고정하면 "2공장" 이 "2…" 로 잘린다. 라벨이 모두 세 글자라
+  // 내용에 맞춰도 세 줄이 저절로 정렬된다.
+  txt(box, text, f.label, C_MUTE, { minScale: 0.8 });
   return box;
 }
 
@@ -200,7 +201,8 @@ function plantRow(col, team, plant, f) {
   row.spacing = 5;
   chip(row, plant + "공장", f);
   const list = membersOf(team, plant);
-  txt(row, list.length ? list.join(" ") : "미등록", f.name,
+  const size = (plant === BIG_PLANT) ? f.nameBig : f.name;   // 2공장만 크게
+  txt(row, list.length ? list.join(" ") : "미등록", size,
       list.length ? C_FG : C_DIM, { lineLimit: 1, minScale: 0.45 });
   row.addSpacer();
   return row;
@@ -215,11 +217,11 @@ function shiftHead(col, kind, team, f, opts = {}) {
   row.spacing = 4;
 
   symbol(row, isDay ? "sun.max.fill" : "moon.fill", f.icon, color);
-  txt(row, isDay ? "주간" : "야간", f.kind, C_MUTE);
-  txt(row, team + "조", f.team, color, { bold: true });
-  txt(row, "·", f.kind, C_DIM);
+  txt(row, isDay ? "주간" : "야간", f.kind, C_MUTE, { minScale: 0.7 });
+  txt(row, team + "조", f.team, color, { bold: true, minScale: 0.7 });
   const lead = leaderOf(team);
-  txt(row, lead || "미등록", f.leader, lead ? C_FG : C_DIM, { bold: true });
+  // 조장 이름이 "김…" 으로 잘리지 않도록 축소를 허용한다
+  txt(row, lead || "미등록", f.leader, lead ? C_FG : C_DIM, { bold: true, minScale: 0.6 });
   row.addSpacer();
   if (opts.now) txt(row, "● 근무중", f.badge, color);
   else txt(row, isDay ? "08:00~" : "20:00~", f.badge, C_DIM, { mono: true });
@@ -288,18 +290,23 @@ const REFRESH_MS = 15 * 60 * 1000;
 
 // 아이폰에서 medium 과 large 는 폭이 같고 높이만 다르다. 그래서 이름 크기는
 // 둘이 비슷하게 두고, large 는 남는 높이를 제목과 아래 목록에 쓴다.
+// 2공장을 크게 보여준다 (사용 빈도가 가장 높은 공장)
+const BIG_PLANT = "2";
+
+// 아이폰에서 medium 과 large 는 폭이 같고 높이만 다르다. 이름 크기는 비슷하게
+// 두고, large 는 남는 높이를 제목과 아래 목록에 쓴다.
 const FONTS = {
-  small:  { date: 11.5, meta: 9.5,  icon: 12, kind: 10.5, team: 16,   leader: 12,   badge: 9.5,
-            label: 8.5,  name: 10,   labelW: 26, gapHead: 4, gapRow: 3, divH: 0,
+  small:  { date: 11.5, meta: 9.5,  icon: 12, kind: 10,   team: 15,   leader: 12,   badge: 9,
+            label: 8.5,  name: 9.5,  nameBig: 11,   gapHead: 4, gapRow: 3, divH: 0,
             pad: 11, gap: 0 },
-  medium: { date: 12.5, meta: 10,   icon: 12, kind: 10.5, team: 16,   leader: 13,   badge: 9.5,
-            label: 8.5,  name: 12,   labelW: 27, gapHead: 5, gapRow: 5, divH: 88,
+  medium: { date: 12.5, meta: 10,   icon: 12, kind: 10,   team: 15,   leader: 12.5, badge: 9,
+            label: 8,    name: 10.5, nameBig: 13.5,   gapHead: 5, gapRow: 5, divH: 88,
             pad: 9,  gap: 7 },
-  large:  { date: 14.5, meta: 11.5, icon: 14, kind: 12,   team: 18,   leader: 14.5, badge: 11,
-            label: 9,    name: 12.5, labelW: 28, gapHead: 6, gapRow: 6, divH: 98,
+  large:  { date: 14.5, meta: 11.5, icon: 14, kind: 11.5, team: 17,   leader: 14,   badge: 10.5,
+            label: 8.5,  name: 11,   nameBig: 14,   gapHead: 6, gapRow: 6, divH: 98,
             pad: 10, gap: 8 },
-  extraLarge: { date: 16, meta: 13, icon: 17, kind: 14.5, team: 21.5, leader: 17,   badge: 12.5,
-            label: 11.5, name: 15.5, labelW: 39, gapHead: 8, gapRow: 8, divH: 122,
+  extraLarge: { date: 16, meta: 13, icon: 17, kind: 14,   team: 21,   leader: 16.5, badge: 12.5,
+            label: 11.5, name: 14,   nameBig: 17.5, gapHead: 8, gapRow: 8, divH: 122,
             pad: 13, gap: 12 }
 };
 
