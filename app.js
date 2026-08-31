@@ -116,6 +116,10 @@
     };
   }
 
+  // 상근 인원 — 교대를 돌지 않으므로 A~D 조 명단과 분리해서 둔다.
+  // 조 설정에서 편집하지 않고 배포 값만 쓴다.
+  var STAFF = ['방우석', '류인환', '우두형', '고형진', '고현석'];
+
   // 공지사항 — 여기에 추가하고 배포하면 모든 사람에게 보인다.
   var NOTICES = [
     {
@@ -636,6 +640,20 @@
       body.appendChild(pan);
     });
 
+    if (STAFF.length) {
+      var sp = el('div', 'panel');
+      var sh = el('div', 'panel-hd');
+      sh.appendChild(el('span', 'panel-t', '상근'));
+      sh.appendChild(el('span', 'panel-c', '교대 없음 · ' + STAFF.length + '명'));
+      sp.appendChild(sh);
+      var sb = el('div', 'panel-b');
+      var sul = el('ul', 'names sel');
+      STAFF.forEach(function (n) { sul.appendChild(el('li', null, n)); });
+      sb.appendChild(sul);
+      sp.appendChild(sb);
+      body.appendChild(sp);
+    }
+
     var goEdit = el('button', 'btn wide', '조 설정에서 편집');
     goEdit.type = 'button';
     goEdit.addEventListener('click', function () { editTeam = statusTeam; go('crewset'); });
@@ -1143,7 +1161,7 @@
     window.SHIFT = {
       shiftOf: shiftOf, runSelfTest: runSelfTest, keyOf: keyOf, currentShift: currentShift,
       data: function () { return DATA; }, go: go, openSheet: openSheet,
-      seedVersion: SEED_VERSION, adoptSeed: adoptSeed
+      seedVersion: SEED_VERSION, adoptSeed: adoptSeed, staff: STAFF
     };
   }
 

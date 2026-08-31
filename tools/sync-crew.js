@@ -22,13 +22,18 @@ const crews = seedCrews();
 const vm = src.match(/var\s+SEED_VERSION\s*=\s*(\d+)/);
 const seedVersion = vm ? Number(vm[1]) : 1;
 
+// 상근 인원도 함께 내보낸다 (교대 명단과는 별개)
+const sm = src.match(/var\s+STAFF\s*=\s*(\[[^\]]*\])/);
+const staff = sm ? new Function('return ' + sm[1])() : [];
+
 const out = {
   seedVersion,
   updatedAt: new Date().toISOString().slice(0, 10),
-  crews
+  crews,
+  staff
 };
 fs.writeFileSync(path.join(root, 'crew.json'), JSON.stringify(out, null, 2) + '\n', 'utf8');
 
 const total = Object.keys(crews).reduce((n, t) =>
   n + Object.keys(crews[t].factories).reduce((m, p) => m + crews[t].factories[p].length, 0), 0);
-console.log(`crew.json 갱신 완료 — seedVersion ${seedVersion}, 조장 4명, 조원 ${total}명`);
+console.log(`crew.json 갱신 완료 — seedVersion ${seedVersion}, 조장 4명, 조원 ${total}명, 상근 ${staff.length}명`);
