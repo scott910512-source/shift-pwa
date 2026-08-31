@@ -73,7 +73,7 @@
      명단을 바꿔 배포할 때는 SEED_VERSION 을, 공지를 바꿀 때는
      NOTICES 만 고치고 sw.js 의 CACHE_VERSION 을 올린다. */
 
-  var SEED_VERSION = 7;
+  var SEED_VERSION = 8;
 
   function seedCrews() {
     // 조직도 기준. 각 공장 안의 순서는 Board → Field 1 → Field 2 → Field 3.
@@ -110,7 +110,7 @@
         factories: {
           '1': ['정경훈', '정영훈', '이원준'],
           '2': ['백정욱', '김병섭', '박상준'],
-          '3': ['양진리', '안은철', '김지용', '황성효']
+          '3': ['양진리', '안윤철', '김지용', '황성호']
         }
       }
     };
