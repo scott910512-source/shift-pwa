@@ -461,7 +461,12 @@
       }
       var p = partsOfKey(c.key);
       var s = shiftOf(c.key);
-      var b = el('button', 'cd d' + mod(i, 7) + (c.key === tKey ? ' today' : ''));
+      // 3일 블록 단위로 배경을 번갈아 칠해 묶음이 눈에 보이게 한다.
+      // 블록이 줄바꿈을 넘어가도 구분되도록 첫날에는 세로 표시를 넣는다.
+      var blk = mod(Math.floor(Math.round((c.key - ANCHOR) / DAY) / 3), 2);
+      var b = el('button', 'cd d' + mod(i, 7) +
+        (blk ? ' blk' : '') + (s.nth === 1 ? ' bstart' : '') +
+        (c.key === tKey ? ' today' : ''));
       b.type = 'button';
       b.dataset.key = String(c.key);
       b.setAttribute('aria-label',

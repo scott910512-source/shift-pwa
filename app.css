@@ -253,12 +253,21 @@ svg{ width:100%; height:100%; fill:none; stroke:currentColor; stroke-width:1.8;
 
 .cgrid{ display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
 .cd{
+  position:relative;
   background:var(--card); border:1px solid var(--line); border-radius:var(--r-s);
   min-height:58px; padding:4px 2px 5px;
   display:flex; flex-direction:column; align-items:center; gap:3px;
 }
 .cd.void{ background:transparent; border-color:transparent; }
-.cd.today{ border:2px solid var(--fg-2); background:var(--card-2); }
+/* 3일 블록을 번갈아 칠한다 */
+.cd.blk{ background:var(--card-3); }
+/* 블록 첫날 왼쪽 표시 — 줄이 바뀌어도 묶음의 시작을 알 수 있다 */
+.cd.bstart::before{
+  content:""; position:absolute; left:2px; top:6px; bottom:6px;
+  width:2px; border-radius:1px; background:var(--line-3);
+}
+.cd.today{ border:2px solid var(--fg); background:var(--card-3); }
+.cd.today.blk{ background:var(--card-2); }
 .cd .n{ font-family:var(--fm); font-size:12px; font-variant-numeric:tabular-nums;
         color:var(--fg-2); line-height:1.2; }
 .cd.d0 .n{ color:var(--sun-c); }
@@ -274,7 +283,7 @@ svg{ width:100%; height:100%; fill:none; stroke:currentColor; stroke-width:1.8;
 .chip.d{ background:var(--day-bg); color:var(--day); border:1px solid var(--day-edge); }
 .chip.n{ background:var(--night-bg); color:var(--night); border:1px solid var(--night-edge); }
 
-.hint{ margin:10px 2px 0; font-size:11.5px; color:var(--fg-3); }
+.hint{ margin:10px 2px 0; font-size:11.5px; color:var(--fg-3); line-height:1.5; }
 
 /* ---------- 세그먼트 ---------- */
 .seg{ display:grid; grid-auto-flow:column; grid-auto-columns:1fr; gap:3px;
