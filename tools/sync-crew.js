@@ -34,6 +34,27 @@ const out = {
 };
 fs.writeFileSync(path.join(root, 'crew.json'), JSON.stringify(out, null, 2) + '\n', 'utf8');
 
+// desktop/wallpaper.py 의 내장 명단(FALLBACK)도 같이 맞춘다.
+// 사내망에서 crew.json 을 못 받아올 때 이 값이 쓰이므로 비어 있으면 안 된다.
+const wp = path.join(root, 'desktop', 'wallpaper.py');
+const q = v => JSON.stringify(v, null, 0).replace(/","/g, '", "').replace(/:\[/g, ': [');
+const lines = ['# FALLBACK:START — tools/sync-crew.js 가 자동으로 고쳐 쓴다. 손으로 고치지 말 것.', 'FALLBACK = {', '  "crews": {'];
+const names = Object.keys(crews);
+names.forEach((t, i) => {
+  const f = crews[t].factories;
+  lines.push(`    ${JSON.stringify(t)}: {"leader": ${JSON.stringify(crews[t].leader)}, "factories": {`);
+  const ps = Object.keys(f);
+  ps.forEach((pk, j) => {
+    lines.push(`      ${JSON.stringify(pk)}: ${q(f[pk])}${j < ps.length - 1 ? ',' : '}}' + (i < names.length - 1 ? ',' : '')}`);
+  });
+});
+lines.push('  },', `  "staff": ${q(staff)}`, '}', '# FALLBACK:END');
+
+const wpSrc = fs.readFileSync(wp, 'utf8');
+const re = /# FALLBACK:START[\s\S]*?# FALLBACK:END/;
+if (!re.test(wpSrc)) throw new Error('desktop/wallpaper.py 에서 FALLBACK 블록을 찾지 못했습니다.');
+fs.writeFileSync(wp, wpSrc.replace(re, lines.join('\n')), 'utf8');
+
 const total = Object.keys(crews).reduce((n, t) =>
   n + Object.keys(crews[t].factories).reduce((m, p) => m + crews[t].factories[p].length, 0), 0);
-console.log(`crew.json 갱신 완료 — seedVersion ${seedVersion}, 조장 4명, 조원 ${total}명, 상근 ${staff.length}명`);
+console.log(`crew.json + wallpaper.py 갱신 완료 — seedVersion ${seedVersion}, 조장 4명, 조원 ${total}명, 상근 ${staff.length}명`);

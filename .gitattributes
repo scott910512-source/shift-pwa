@@ -1,0 +1,4 @@
+# 윈도우용 스크립트는 줄바꿈(CRLF)과 BOM 이 그대로 유지돼야 한다.
+# LF 로 바뀌면 PowerShell 줄잇기가 깨지고, BOM 이 없으면 한글이 깨진다.
+*.ps1 -text
+*.bat -text
