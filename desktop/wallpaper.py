@@ -16,6 +16,7 @@
   python wallpaper.py                 # 이미지 생성 + 바탕화면 지정
   python wallpaper.py --no-set        # 이미지만 생성 (지정하지 않음)
   python wallpaper.py --out a.png --size 1920x1080 --now 2026-09-15T03:00
+  python wallpaper.py --icon-cols 3   # 아이콘이 세 줄이면 그만큼 더 비운다
 """
 
 import calendar
@@ -29,6 +30,13 @@ import urllib.request
 from PIL import Image, ImageDraw, ImageFont
 
 CREW_URL = "https://scott910512-source.github.io/shift-pwa/crew.json"
+
+# 바탕화면 아이콘이 가리지 않도록 왼쪽을 몇 칸 비워 둘지.
+# 윈도우 아이콘은 왼쪽 위부터 세로로 쌓이므로 그 폭만큼 피해서 그린다.
+# 아이콘이 두 줄(열)을 넘어가면 3, 4 로 올리면 된다. 0 이면 꽉 채운다.
+# 실행할 때 --icon-cols 3 처럼 바꿔 줄 수도 있다.
+ICON_COLS = 2
+ICON_COL_W = 112            # 아이콘 한 열의 폭 (1080p 기준, 보통 크기 아이콘)
 
 # ───────────────────────── 근무 패턴 (웹앱·위젯과 동일) ─────────────────────────
 
@@ -247,7 +255,7 @@ def fit(dr, text, path, size, maxw, floor=9):
     return ImageFont.truetype(path, max(floor, size))
 
 
-def build_image(view, crew, size, fonts, source):
+def build_image(view, crew, size, fonts, source, icon_cols=ICON_COLS):
     W, H = size
     bold, reg = fonts
     s = H / 1080.0                                   # 1080p 기준 배율
@@ -259,9 +267,10 @@ def build_image(view, crew, size, fonts, source):
 
     M = S(38)                                        # 바깥 여백
     G = S(20)                                        # 패널 사이 간격
+    gutter = S(ICON_COL_W) * max(0, icon_cols)       # 왼쪽 아이콘 자리
     RW = int(min(W * 0.27, S(430)))                  # 오른쪽 전체 명단 폭
-    LW = W - M * 2 - RW - G                          # 왼쪽 폭
-    LX, RX, TOP = M, W - M - RW, M
+    LW = W - M * 2 - RW - G - gutter                 # 왼쪽 폭
+    LX, RX, TOP = M + gutter, W - M - RW, M
     BOT = H - M
 
     # ── 1. 머리말 ──────────────────────────────────────────────────────
@@ -529,7 +538,8 @@ def main():
     view = current_view(now)
     view["now"] = now
 
-    img = build_image(view, crew, size, pick_font(font_override), source)
+    icon_cols = int(opt("--icon-cols", ICON_COLS))
+    img = build_image(view, crew, size, pick_font(font_override), source, icon_cols)
 
     if not out:
         base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
