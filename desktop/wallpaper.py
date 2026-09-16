@@ -859,6 +859,8 @@ def set_wallpaper(path):
 # ───────────────────────── 작업 스케줄러 (PowerShell 없이) ─────────────────────────
 
 TASK_NAME = "ShiftWallpaper"
+# XML 등록이 막혔을 때만 쓰는 보조 작업들. 이름이 고정이라 다시 깔아도 덮어쓰기만 된다.
+EXTRA_TASKS = [TASK_NAME + "_0005", TASK_NAME + "_0800", TASK_NAME + "_2000"]
 
 TASK_XML = """<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
@@ -960,14 +962,17 @@ def install_task():
             f.write(xml)
         code, out = _run(["schtasks", "/Create", "/TN", TASK_NAME, "/XML", tmp, "/F"])
         if code == 0:
+            # 예전에 보조 작업으로 깔렸다면 지운다. 안 지우면 같은 시각에 두 번 돈다.
+            for n in EXTRA_TASKS:
+                _run(["schtasks", "/Delete", "/TN", n, "/F"])
             return True, "로그온 시 + 매일 00:05 · 08:00 · 20:00"
         # XML 등록이 막히면 트리거를 따로따로 만든다 (기능은 같고 밀린 실행 따라잡기만 없음)
         tr = '"%s" "%s"' % (exe, script)
         made = []
         for name, args in ((TASK_NAME, ["/SC", "ONLOGON"]),
-                           (TASK_NAME + "_0005", ["/SC", "DAILY", "/ST", "00:05"]),
-                           (TASK_NAME + "_0800", ["/SC", "DAILY", "/ST", "08:00"]),
-                           (TASK_NAME + "_2000", ["/SC", "DAILY", "/ST", "20:00"])):
+                           (EXTRA_TASKS[0], ["/SC", "DAILY", "/ST", "00:05"]),
+                           (EXTRA_TASKS[1], ["/SC", "DAILY", "/ST", "08:00"]),
+                           (EXTRA_TASKS[2], ["/SC", "DAILY", "/ST", "20:00"])):
             c, o = _run(["schtasks", "/Create", "/TN", name, "/TR", tr, "/F"] + args)
             if c == 0:
                 made.append(name)
@@ -985,8 +990,7 @@ def install_task():
 
 def uninstall_task():
     gone = []
-    for name in (TASK_NAME, TASK_NAME + "_0005",
-                 TASK_NAME + "_0800", TASK_NAME + "_2000"):
+    for name in [TASK_NAME] + EXTRA_TASKS:
         code, _ = _run(["schtasks", "/Delete", "/TN", name, "/F"])
         if code == 0:
             gone.append(name)
@@ -1021,8 +1025,11 @@ def main():
         print("지금 배경  :", registered_wallpaper() or "(없음)")
         b = policy_blocks()
         print("정책 차단  :", "\n             ".join(b) if b else "없음")
-        code, out2 = _run(["schtasks", "/Query", "/TN", TASK_NAME])
-        print("등록된 작업:", "있음" if code == 0 else "없음")
+        found = [n for n in [TASK_NAME] + EXTRA_TASKS
+                 if _run(["schtasks", "/Query", "/TN", n])[0] == 0]
+        print("등록된 작업:", ", ".join(found) if found else "없음")
+        if len(found) > 1:
+            print("             (보조 작업까지 깔려 있습니다. install.bat 을 다시 실행하면 정리됩니다)")
         crew0, src0 = load_crew(url, online)
         print("명단       : %s — 조원 %d명, 상근 %d명" %
               (src0, sum(len(crew0["crews"][t]["factories"][p])

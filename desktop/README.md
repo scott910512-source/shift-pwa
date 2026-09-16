@@ -130,6 +130,15 @@ Pillow(이미지 라이브러리)만 최초 1회 필요한데, 사내망에서 �
 | 매일 20:00 | 야간 교대 반영 |
 | PC가 꺼져 있어 놓친 경우 | 켜면 바로 따라잡음 (`StartWhenAvailable`) |
 
+작업 이름은 **`ShiftWallpaper`** 하나입니다 (`Win+R` → `taskschd.msc`).
+`install.bat` 을 여러 번 눌러도 **같은 이름을 덮어쓰기만 하므로 쌓이지 않습니다.**
+이미지도 `wallpaper_a.png` / `wallpaper_b.png` 두 개를 번갈아 쓸 뿐입니다.
+
+작업 스케줄러 등록이 막힌 PC 에서는 보조로 `ShiftWallpaper_0005` ·
+`_0800` · `_2000` 세 개가 대신 깔립니다. 나중에 정상 등록이 되면
+`install.bat` 이 그 세 개를 지웁니다. `check.bat` 이 깔려 있는 작업을
+전부 보여 줍니다.
+
 지금 당장 갱신하려면 `install.bat` 을 다시 실행하거나,
 작업 스케줄러에서 `ShiftWallpaper` 를 우클릭 → 실행하면 됩니다.
 
