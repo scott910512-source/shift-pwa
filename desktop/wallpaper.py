@@ -258,6 +258,10 @@ FOOTER_LINE  = "SAFETY · PEOPLE · TECHNOLOGY · SUSTAINABILITY"
 GREETING     = ("오늘도 안전하게,", "좋은 하루 되세요.")
 QUOTE        = "안전이 최고의 생산성입니다."
 
+# 화면 크기를 잘못 잡으면 (1920, 1080) 처럼 직접 적는다. None 이면 자동 감지.
+# check.bat 을 돌리면 지금 어떻게 재고 있는지 보여 준다.
+SCREEN = None
+
 # 배경. "black" 또는 "sejong"(세종호수공원·이응다리 그림) 또는 사진 파일 경로.
 # 스크립트 옆에 background.jpg 를 두면 그 사진이 우선한다.
 BACKGROUND = "black"
@@ -760,16 +764,55 @@ def build_image(view, crew, size, fonts, source, icon_cols=ICON_COLS, scale=SCAL
 
 # ───────────────────────────────── Windows ─────────────────────────────────
 
-def screen_size():
-    try:
+def _dpi_aware():
+    for call in (lambda: ctypes.windll.shcore.SetProcessDpiAwareness(2),
+                 lambda: ctypes.windll.user32.SetProcessDPIAware()):
         try:
-            ctypes.windll.shcore.SetProcessDpiAwareness(2)
+            call()
+            return True
         except Exception:
-            ctypes.windll.user32.SetProcessDPIAware()
+            continue
+    return False
+
+
+def screen_probe():
+    """화면 크기를 여러 방법으로 재 본다. (재 본 값들, 고른 값)
+
+    화면 배율(125%·150%·200%)이 켜져 있으면 GetSystemMetrics 는 배율이
+    적용된 작은 값을 준다. 그 크기로 그리면 윈도우가 늘려 채워서 글자가
+    커지고 흐려진다. GetDeviceCaps(DESKTOPHORZRES) 는 배율과 상관없이
+    실제 화소 수를 주므로 둘 중 큰 쪽을 쓴다.
+    """
+    got = {}
+    aware = _dpi_aware()
+    try:
         u = ctypes.windll.user32
-        return u.GetSystemMetrics(0), u.GetSystemMetrics(1)
+        got["GetSystemMetrics"] = (u.GetSystemMetrics(0), u.GetSystemMetrics(1))
     except Exception:
-        return 1920, 1080
+        pass
+    try:
+        u, g = ctypes.windll.user32, ctypes.windll.gdi32
+        hdc = u.GetDC(0)
+        if hdc:
+            try:
+                got["GetDeviceCaps"] = (g.GetDeviceCaps(hdc, 118),   # DESKTOPHORZRES
+                                        g.GetDeviceCaps(hdc, 117))  # DESKTOPVERTRES
+                got["배율"] = "%d%%" % round(g.GetDeviceCaps(hdc, 88) / 96.0 * 100)
+            finally:
+                u.ReleaseDC(0, hdc)
+    except Exception:
+        pass
+    got["DPI 인식"] = "켬" if aware else "끔"
+
+    ok = [v for k, v in got.items()
+          if isinstance(v, tuple) and v[0] >= 640 and v[1] >= 480]
+    return got, (max(ok, key=lambda wh: wh[0] * wh[1]) if ok else (1920, 1080))
+
+
+def screen_size():
+    if SCREEN:
+        return tuple(SCREEN)
+    return screen_probe()[1]
 
 
 # 회사 PC 는 정책으로 배경 변경을 막아 두는 일이 많다. 어디서 막혔는지 알려 준다.
@@ -1021,7 +1064,19 @@ def main():
         print("=== 점검 ===")
         print("파이썬     :", sys.executable)
         print("스크립트   :", os.path.abspath(__file__))
-        print("화면 크기  : %dx%d" % screen_size())
+        probe, pick = screen_probe()
+        for k, v in probe.items():
+            print("%-10s : %s" % (k, "%dx%d" % v if isinstance(v, tuple) else v))
+        print("고른 크기  : %dx%d%s" % (pick[0], pick[1], "  (SCREEN 으로 지정됨)" if SCREEN else ""))
+        cur = registered_wallpaper()
+        if cur and os.path.exists(cur):
+            try:
+                from PIL import Image as _I
+                iw, ih = _I.open(cur).size
+                print("지금 배경 이미지: %dx%d%s" % (iw, ih,
+                      "" if (iw, ih) == tuple(screen_size()) else "  ← 화면과 다릅니다"))
+            except Exception:
+                pass
         print("지금 배경  :", registered_wallpaper() or "(없음)")
         b = policy_blocks()
         print("정책 차단  :", "\n             ".join(b) if b else "없음")
