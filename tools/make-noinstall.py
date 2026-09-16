@@ -6,7 +6,7 @@
   받는 사람 PC 에는 아무것도 설치하지 않아도 된다.
 
 사용법:
-  python tools/make-noinstall.py --days 180 --out build/noinstall
+  python tools/make-noinstall.py --days 120 --size 2560x1440
 """
 
 import datetime as dt
@@ -116,7 +116,7 @@ pause
 '''
 
 
-def readme(start, end, n):
+def readme(start, end, n, size):
     return """4조 2교대 근무표 — PC 바탕화면 (파이썬 없이)
 
 ■ 쓰는 법
@@ -128,6 +128,12 @@ def readme(start, end, n):
 ■ 언제 바뀌나
    로그온할 때 / 매일 00:05 · 08:00 · 20:00
    (00:05 날짜 넘김, 08:00 주간 교대, 20:00 야간 교대)
+
+■ 이미지 크기
+   %s 로 미리 그려 두었습니다.
+   이보다 작은 화면이면 윈도우가 줄여서 깔끔하게 나옵니다.
+   이보다 큰 화면(4K 등)이면 늘어나 흐릿해집니다. 그럴 땐 새 묶음을 받으세요.
+   내 화면 크기는 개인 설정 → 디스플레이 → 디스플레이 해상도 에서 봅니다.
 
 ■ 주의
    · 이 묶음은 %s ~ %s (%d일치) 까지만 들어 있습니다.
@@ -148,7 +154,7 @@ def readme(start, end, n):
 ■ 파이썬을 깔 수 있다면
    desktop 묶음(wallpaper.py)을 쓰는 편이 낫습니다.
    기간 제한이 없고, 용량도 훨씬 작고, 명단만 바꿔 끼울 수 있습니다.
-""" % (start, end, n)
+""" % (size, start, end, n)
 
 
 def main():
@@ -157,9 +163,9 @@ def main():
     def opt(name, default=None):
         return args[args.index(name) + 1] if name in args else default
 
-    days = int(opt("--days", 180))
+    days = int(opt("--days", 120))
     out = opt("--out", os.path.join(ROOT, "build", "noinstall"))
-    size = opt("--size", "1920x1080")
+    size = opt("--size", "2560x1440")
     W, H = (int(v) for v in size.lower().split("x"))
     scale = float(opt("--scale", wp.SCALE))
     icon_cols = int(opt("--icon-cols", wp.ICON_COLS))
@@ -199,7 +205,7 @@ def main():
         io.open(os.path.join(out, name), "w", encoding="utf-8", newline="").write(
             text.replace("\r\n", "\n").replace("\n", "\r\n"))
     io.open(os.path.join(out, "README.txt"), "w", encoding="utf-8", newline="").write(
-        readme(start.isoformat(), end.isoformat(), days)
+        readme(start.isoformat(), end.isoformat(), days, "%dx%d" % (W, H))
         .replace("\r\n", "\n").replace("\n", "\r\n"))
 
     zpath = out.rstrip("/\\") + ".zip"
