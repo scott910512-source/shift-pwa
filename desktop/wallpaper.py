@@ -271,7 +271,8 @@ def fit(dr, text, path, size, maxw, floor=9):
     return ImageFont.truetype(path, max(floor, size))
 
 
-def build_image(view, crew, size, fonts, source, icon_cols=ICON_COLS, scale=SCALE):
+def build_image(view, crew, size, fonts, source, icon_cols=ICON_COLS, scale=SCALE,
+                stamp=None):
     W, H = size
     bold, reg = fonts
     dpi = H / 1080.0                                 # 화면 해상도 배율
@@ -502,7 +503,8 @@ def build_image(view, crew, size, fonts, source, icon_cols=ICON_COLS, scale=SCAL
         dr.text((rx + S(2), ry), "미등록", font=F(reg, 20), fill=DIM)
         ry += S(27)
 
-    stamp = "%02d:%02d 기준 · 명단 %s" % (view["now"].hour, view["now"].minute, source)
+    if stamp is None:
+        stamp = "%02d:%02d 기준 · 명단 %s" % (view["now"].hour, view["now"].minute, source)
     f_st = F(reg, 17)
     dr.text((rx + rw - dr.textlength(stamp, font=f_st), BOT - rpad - S(18)),
             stamp, font=f_st, fill=DIM)
