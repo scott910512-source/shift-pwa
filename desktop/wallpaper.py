@@ -17,6 +17,7 @@
   python wallpaper.py --no-set        # 이미지만 생성 (지정하지 않음)
   python wallpaper.py --out a.png --size 1920x1080 --now 2026-09-15T03:00
   python wallpaper.py --icon-cols 3   # 아이콘이 세 줄이면 그만큼 더 비운다
+  python wallpaper.py --scale 0.9     # 전체 크기 (작을수록 아담)
   python wallpaper.py --install       # 이미지 생성 + 작업 스케줄러 등록
   python wallpaper.py --uninstall     # 자동 갱신 해제
   python wallpaper.py --diag          # 왜 안 바뀌는지 점검
@@ -44,8 +45,12 @@ CREW_URL = "https://scott910512-source.github.io/shift-pwa/crew.json"
 # 윈도우 아이콘은 왼쪽 위부터 세로로 쌓이므로 그 폭만큼 피해서 그린다.
 # 아이콘이 두 줄(열)을 넘어가면 3, 4 로 올리면 된다. 0 이면 꽉 채운다.
 # 실행할 때 --icon-cols 3 처럼 바꿔 줄 수도 있다.
-ICON_COLS = 2
-ICON_COL_W = 112            # 아이콘 한 열의 폭 (1080p 기준, 보통 크기 아이콘)
+ICON_COLS = 5
+ICON_COL_W = 78             # 아이콘 한 열의 폭 (1080p 기준, 보통 크기 아이콘)
+
+# 전체 크기. 1.0 이면 화면을 꽉 채우고, 작을수록 아담해진다.
+# --scale 0.9 처럼 실행할 때 바꿔 줄 수도 있다.
+SCALE = 0.78
 
 # ───────────────────────── 근무 패턴 (웹앱·위젯과 동일) ─────────────────────────
 
@@ -266,23 +271,34 @@ def fit(dr, text, path, size, maxw, floor=9):
     return ImageFont.truetype(path, max(floor, size))
 
 
-def build_image(view, crew, size, fonts, source, icon_cols=ICON_COLS):
+def build_image(view, crew, size, fonts, source, icon_cols=ICON_COLS, scale=SCALE):
     W, H = size
     bold, reg = fonts
-    s = H / 1080.0                                   # 1080p 기준 배율
+    dpi = H / 1080.0                                 # 화면 해상도 배율
+    s = dpi * scale                                  # 글자·간격 배율
     S = lambda v: max(1, int(round(v * s)))
     F = lambda p, sz: ImageFont.truetype(p, max(10, int(sz * s)))
 
     img = Image.new("RGB", (W, H), BG)
     dr = ImageDraw.Draw(img)
 
-    M = S(38)                                        # 바깥 여백
+    M = max(1, int(round(30 * dpi)))                 # 화면 가장자리 여백
+    # 아이콘은 화면 배율만 따르고 SCALE 과는 무관하다 (실제 아이콘 크기가 기준)
+    gutter = int(round(ICON_COL_W * max(0, icon_cols) * dpi))
+
+    # 내용 상자 — 오른쪽에 붙이고 세로 가운데. 아이콘 자리를 침범하지 않는다.
+    box_w = int((W - M * 2) * scale)
+    box_w = max(min(box_w, W - M - (gutter + M)), int(W * 0.3))
+    box_h = int((H - M * 2) * scale)
+    x0 = W - M - box_w
+    y0 = max(M, (H - box_h) // 2)
+    box_h = min(box_h, H - y0 - M)
+
     G = S(20)                                        # 패널 사이 간격
-    gutter = S(ICON_COL_W) * max(0, icon_cols)       # 왼쪽 아이콘 자리
-    RW = int(min(W * 0.27, S(430)))                  # 오른쪽 전체 명단 폭
-    LW = W - M * 2 - RW - G - gutter                 # 왼쪽 폭
-    LX, RX, TOP = M + gutter, W - M - RW, M
-    BOT = H - M
+    RW = int(min(box_w * 0.27, S(430)))              # 오른쪽 전체 명단 폭
+    LW = box_w - RW - G                              # 왼쪽 폭
+    LX, RX, TOP = x0, x0 + box_w - RW, y0
+    BOT = y0 + box_h
 
     # ── 1. 머리말 ──────────────────────────────────────────────────────
     d = view["date"]
@@ -772,7 +788,8 @@ def main():
     view["now"] = now
 
     icon_cols = int(opt("--icon-cols", ICON_COLS))
-    img = build_image(view, crew, size, pick_font(font_override), source, icon_cols)
+    scale = float(opt("--scale", SCALE))
+    img = build_image(view, crew, size, pick_font(font_override), source, icon_cols, scale)
 
     if not out:
         base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
