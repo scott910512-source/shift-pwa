@@ -506,7 +506,7 @@ def build_image(view, crew, size, fonts, source, icon_cols=ICON_COLS, scale=SCAL
     head_b = y + S(76)
     # ── 오른쪽: 전체 근무자 (세로로 길게) ─────────────────────────────
     foot_h = S(26) if FOOTER_LINE else 0
-    RW = int(min(box_w * 0.27, S(400)))
+    RW = int(min(box_w * 0.30, S(440)))
     LWid = box_w - RW - S(14)
     RXp = LX + box_w - RW
 
@@ -517,18 +517,18 @@ def build_image(view, crew, size, fonts, source, icon_cols=ICON_COLS, scale=SCAL
     rx, rw = RXp + rpad, RW - rpad * 2
     ry = head_b + rpad
 
-    dr.text((rx + S(2), ry), "전체 근무자", font=F(bold, 21), fill=FG)
+    dr.text((rx + S(2), ry), "전체 근무자", font=F(bold, 22), fill=FG)
     ry += S(32)
 
     live = {view["day"]: ("주간", DAY_C), view["night"]: ("야간", NIGHT_C)}
     inner = (BOT - foot_h) - rpad - ry
-    f_pl = F(reg, 14)
+    f_pl = F(reg, 15)
     plw = max(dr.textlength(q + "공장", font=f_pl) for q in PLANTS) + S(10)
 
-    f_st2 = F(reg, 15)
+    f_st2 = F(reg, 17)
     per = max(1, int(rw // (dr.textlength("홍길동  ", font=f_st2) or 1)))
     st_lines = [crew["staff"][i:i + per] for i in range(0, len(crew["staff"]), per)] or [[]]
-    staff_h = S(30) + S(24) * len(st_lines)
+    staff_h = S(32) + S(26) * len(st_lines)
     team_h = (inner - staff_h - S(14) - S(10) * 4) // 4     # 조마다 같은 높이로 나눈다
     team_h = max(S(104), team_h)
 
@@ -542,38 +542,40 @@ def build_image(view, crew, size, fonts, source, icon_cols=ICON_COLS, scale=SCAL
         iw2 = rw - S(24)
 
         col = on[1] if on else (126, 140, 158)
-        f_t = F(bold, 16)
+        f_t = F(bold, 17)
         tb = dr.textlength(t, font=f_t)
-        dr.rounded_rectangle([px2, py2, px2 + tb + S(16), py2 + S(23)], radius=S(6), fill=col)
-        dr.text((px2 + S(8), py2 + S(2)), t, font=f_t, fill=(14, 18, 24))
-        dr.text((px2 + tb + S(26), py2 + S(1)), c["leader"] or "미등록",
-                font=F(bold, 18), fill=FG if c["leader"] else INK3)
+        dr.rounded_rectangle([px2, py2, px2 + tb + S(18), py2 + S(26)], radius=S(6), fill=col)
+        dr.text((px2 + S(9), py2 + S(2)), t, font=f_t, fill=(14, 18, 24))
+        dr.text((px2 + tb + S(30), py2 + S(1)), c["leader"] or "미등록",
+                font=F(bold, 20), fill=FG if c["leader"] else INK3)
         if on:
-            f_b = F(bold, 13)
-            dr.text((px2 + iw2 - dr.textlength(on[0], font=f_b), py2 + S(5)),
+            f_b = F(bold, 14)
+            dr.text((px2 + iw2 - dr.textlength(on[0], font=f_b), py2 + S(6)),
                     on[0], font=f_b, fill=col)
 
-        py2 += S(30)
-        step = max(S(22), (ry + team_h - S(8) - py2) // len(PLANTS))
-        for p in PLANTS:
+        py2 += S(32)
+        room2 = (ry + team_h - S(8)) - py2
+        step = max(S(24), room2 / len(PLANTS))
+        lh2 = S(20)
+        for i2, p in enumerate(PLANTS):
             names = c["factories"][p]
-            dr.text((px2, py2 + S(2)), p + "공장", font=f_pl, fill=INK3)
+            ly2 = py2 + step * i2 + (step - lh2) / 2
+            dr.text((px2, ly2 + S(3)), p + "공장", font=f_pl, fill=INK3)
             txt = " ".join(names) if names else "미등록"
-            dr.text((px2 + plw, py2),
-                    txt, font=fit(dr, txt, reg, 16 * s, iw2 - plw),
+            dr.text((px2 + plw, ly2),
+                    txt, font=fit(dr, txt, reg, 18 * s, iw2 - plw),
                     fill=INK2 if names else INK3)
-            py2 += step
         ry += team_h + S(10)
 
     dr.line([rx, ry - S(2), rx + rw, ry - S(2)], fill=LINE, width=max(1, S(1)))
     ry += S(8)
-    f_sl = F(bold, 17)
+    f_sl = F(bold, 18)
     dr.text((rx + S(2), ry), "상근", font=f_sl, fill=FG)
-    dr.text((rx + S(2) + dr.textlength("상근", font=f_sl) + S(10), ry + S(4)),
-            "(교대 없음)", font=F(reg, 13), fill=INK3)
-    ry += S(26)
+    dr.text((rx + S(2) + dr.textlength("상근", font=f_sl) + S(10), ry + S(5)),
+            "(교대 없음)", font=F(reg, 14), fill=INK3)
+    ry += S(28)
     for i, ln in enumerate(st_lines):
-        dr.text((rx + S(2), ry + i * S(24)),
+        dr.text((rx + S(2), ry + i * S(26)),
                 "  ".join(ln) if ln else "미등록", font=f_st2, fill=INK2 if ln else INK3)
 
     # ── 왼쪽 위: 현재 근무자 (크게) ───────────────────────────────────
@@ -629,15 +631,19 @@ def build_image(view, crew, size, fonts, source, icon_cols=ICON_COLS, scale=SCAL
 
         f_p = F(reg, 16)
         plw2 = max(d2.textlength(q + "공장", font=f_p) for q in PLANTS) + S(12)
-        step = max(S(26), (cy_ + ch_ - S(12) - py) // len(PLANTS))
-        for p in PLANTS:
+        # 남은 칸을 셋으로 나누고, 각 줄을 제 칸의 세로 가운데에 놓는다.
+        # (예전엔 위로 몰리고 아래가 남았다)
+        room = (cy_ + ch_ - S(10)) - py
+        step = max(S(26), room / len(PLANTS))
+        lh = S(22)
+        for i, p in enumerate(PLANTS):
             names = c["factories"][p]
-            d2.text((px, py + S(4)), p + "공장", font=f_p, fill=INK3)
+            ly = py + step * i + (step - lh) / 2
+            d2.text((px, ly + S(4)), p + "공장", font=f_p, fill=INK3)
             txt = "   ".join(names) if names else "미등록"
-            d2.text((px + plw2, py),
+            d2.text((px + plw2, ly),
                     txt, font=fit(d2, txt, bold, 21 * s, iw - plw2),
                     fill=FG if names else INK3)
-            py += step
 
     shift_card(LX + hp, "day", view["day"])
     shift_card(LX + hp + cwid + S(12), "night", view["night"])
