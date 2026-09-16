@@ -22,6 +22,7 @@
   python wallpaper.py --uninstall     # 자동 갱신 해제
   python wallpaper.py --diag          # 왜 안 바뀌는지 점검
   python wallpaper.py --online        # 최신 명단을 받아온다 (기본은 내장 명단)
+  python wallpaper.py --bg 사진.jpg    # 배경으로 쓸 사진 (없으면 세종호수공원 그림)
 """
 
 import calendar
@@ -33,7 +34,7 @@ import os
 import sys
 import urllib.request
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 # 명단은 아래 FALLBACK 에 전부 들어 있어서 인터넷이 없어도 그대로 돈다.
 # 사내망에서 막히면 기다리기만 하고 얻는 게 없으므로 기본은 접속하지 않는다.
@@ -203,59 +204,171 @@ FONT_CANDIDATES_REG = [
 ]
 
 
+# 머리말의 장식 문구용. 없으면 본문 글꼴로 대신한다.
+FONT_CANDIDATES_SCRIPT = [
+    r"C:\Windows\Fonts\segoesc.ttf",        # Segoe Script
+    r"C:\Windows\Fonts\Gabriola.ttf",
+    r"C:\Windows\Fonts\seguibli.ttf",       # Segoe UI Black Italic
+]
+
+
+def _first(paths):
+    for p in paths:
+        if os.path.exists(p):
+            return p
+    return None
+
+
 def pick_font(override=None):
-    bold = reg = None
+    """(굵게, 보통, 장식) 세 벌을 돌려준다."""
     if override:
-        bold = reg = override
-    else:
-        for p in FONT_CANDIDATES:
-            if os.path.exists(p):
-                bold = p
-                break
-        for p in FONT_CANDIDATES_REG:
-            if os.path.exists(p):
-                reg = p
-                break
+        return override, override, override
+    bold = _first(FONT_CANDIDATES)
+    reg = _first(FONT_CANDIDATES_REG)
     if not bold and not reg:
         raise SystemExit("한글 글꼴을 찾지 못했습니다. --font 로 ttf 경로를 지정하세요.")
-    return bold or reg, reg or bold
+    bold, reg = bold or reg, reg or bold
+    return bold, reg, _first(FONT_CANDIDATES_SCRIPT) or bold
+
 
 
 # ───────────────────────────────── 색 ─────────────────────────────────
 
-BG       = (10, 14, 20)
-PANEL    = (23, 29, 37)
-PANEL2   = (28, 35, 45)
-PANEL3   = (33, 41, 52)
-LINE     = (44, 55, 70)
-FG       = (232, 238, 244)
-MUTE     = (152, 163, 177)
-DIM      = (104, 115, 127)
-DAY_C    = (240, 173, 60)
-DAY_BG   = (44, 33, 15)
-NIGHT_C  = (125, 153, 247)
-NIGHT_BG = (21, 29, 52)
-TODAY_BG = (36, 50, 40)
-TODAY_C  = (92, 208, 136)
-SAT_C    = (126, 168, 232)
-SUN_C    = (232, 124, 124)
+INK      = (20, 38, 62)          # 본문 글자
+INK2     = (56, 80, 110)
+INK3     = (112, 136, 164)
+WHITE    = (255, 255, 255)
+DAY_C    = (236, 166, 44)        # 주간
+NIGHT_C  = (68, 114, 206)        # 야간
+TODAY_C  = (38, 116, 224)
+SUN_C    = (220, 74, 74)
+SAT_C    = (52, 116, 210)
+BG       = (150, 186, 214)       # 배경을 못 그렸을 때 쓰는 단색
 
-TEAM_C = {"A": (240, 173, 60), "B": (125, 153, 247),
-          "C": (92, 208, 136), "D": (226, 130, 196)}
-
-
-def draw_sun(dr, cx, cy, r, color):
-    w = max(2, int(r / 5))
-    dr.ellipse([cx - r * .55, cy - r * .55, cx + r * .55, cy + r * .55], outline=color, width=w)
-    for i in range(8):
-        a = math.radians(i * 45)
-        dr.line([cx + math.cos(a) * r * .82, cy + math.sin(a) * r * .82,
-                 cx + math.cos(a) * r * 1.18, cy + math.sin(a) * r * 1.18], fill=color, width=w)
+# 바탕 그림에 얹는 글귀. 필요 없으면 빈 문자열로 두면 그 줄이 사라진다.
+BRAND_SCRIPT = ("Good Work", "Better Tomorrow")
+BRAND_NAME   = "SK트리켐"
+BRAND_SUB    = "Better Chemistry for a Brighter Tomorrow"
+FOOTER_LINE  = "SAFETY · PEOPLE · TECHNOLOGY · SUSTAINABILITY"
+GREETING     = ("오늘도 안전하게,", "좋은 하루 되세요.")
+QUOTE        = "안전이 최고의 생산성입니다."
 
 
-def draw_moon(dr, cx, cy, r, color, bg):
-    dr.ellipse([cx - r, cy - r, cx + r, cy + r], fill=color)
-    dr.ellipse([cx - r * .45, cy - r * 1.25, cx + r * 1.55, cy + r * .75], fill=bg)
+# ─────────────────────── 배경 — 세종호수공원 · 이응다리 ───────────────────────
+
+_BG_CACHE = {}
+
+
+def _lerp(a, b, t):
+    return tuple(int(a[i] + (b[i] - a[i]) * t) for i in range(3))
+
+
+def _sejong(W, H):
+    """세종호수공원과 이응다리를 단순하게 그린다.
+
+    사진을 넣고 싶으면 --bg 로 파일을 지정하면 된다. 사진이 없을 때 쓰는 그림이다.
+    가장자리가 매끄럽도록 두 배 크기로 그린 뒤 줄인다.
+    """
+    k = 2
+    w, h = W * k, H * k
+    img = Image.new("RGB", (w, h), BG)
+    dr = ImageDraw.Draw(img)
+    hz = int(h * 0.54)                                   # 수평선
+
+    SKY_TOP, SKY_MID, SKY_LOW = (58, 122, 190), (128, 176, 214), (196, 220, 232)
+    for y in range(hz):
+        t = y / hz
+        c = _lerp(SKY_TOP, SKY_MID, t / 0.7) if t < 0.7 else _lerp(SKY_MID, SKY_LOW, (t - 0.7) / 0.3)
+        dr.line([(0, y), (w, y)], fill=c)
+
+    # 옅은 햇무리
+    gx, gy, gr = int(w * 0.78), int(h * 0.16), int(h * 0.26)
+    glow = Image.new("L", (w, h), 0)
+    ImageDraw.Draw(glow).ellipse([gx - gr, gy - gr, gx + gr, gy + gr], fill=70)
+    img = Image.composite(Image.new("RGB", (w, h), (255, 246, 222)), img,
+                          glow.filter(ImageFilter.GaussianBlur(gr // 2)))
+    dr = ImageDraw.Draw(img)
+
+    # 먼 산 두 겹
+    for depth, col in ((0.11, (128, 160, 186)), (0.07, (104, 138, 168))):
+        pts, amp = [(0, hz)], int(h * depth)
+        n = 9
+        for i in range(n + 1):
+            x = w * i / n
+            y = hz - amp * (0.45 + 0.55 * math.sin(i * 1.7 + depth * 40) ** 2)
+            pts.append((x, y))
+        pts.append((w, hz))
+        dr.polygon(pts, fill=col)
+
+    # 강 건너 도시 실루엣
+    sky = (96, 130, 162)
+    x = 0
+    rnd = 0
+    while x < w:
+        rnd = (rnd * 1103515245 + 12345) % 2147483648
+        bw = int(w * 0.018) + rnd % int(w * 0.022)
+        bh = int(h * 0.018) + (rnd >> 8) % int(h * 0.055)
+        dr.rectangle([x, hz - bh, x + bw, hz], fill=sky)
+        x += bw + int(w * 0.004)
+
+    # 호수
+    WAT_TOP, WAT_BOT = (116, 158, 192), (70, 110, 150)
+    for y in range(hz, h):
+        dr.line([(0, y), (w, y)], fill=_lerp(WAT_TOP, WAT_BOT, (y - hz) / (h - hz)))
+
+    # 도시 그림자가 물에 비친 것
+    ref = img.crop((0, int(hz - h * 0.07), w, hz)).transpose(Image.FLIP_TOP_BOTTOM)
+    ref = ref.filter(ImageFilter.GaussianBlur(int(h * 0.006)))
+    img.paste(Image.blend(img.crop((0, hz, w, hz + ref.height)), ref, 0.28), (0, hz))
+    dr = ImageDraw.Draw(img)
+
+    # 이응다리 — 물 위에 놓인 둥근 고리
+    cx, cy = int(w * 0.44), int(h * 1.12)
+    rx, ry = int(w * 0.52), int(h * 0.235)
+    deck = int(h * 0.011)
+    for off, col in ((deck, (150, 168, 180)), (0, (246, 246, 242))):   # 그림자 → 상판
+        dr.ellipse([cx - rx, cy - ry + off, cx + rx, cy + ry + off],
+                   outline=col, width=deck)
+    # 상판 위 난간
+    dr.ellipse([cx - rx, cy - ry - deck // 2, cx + rx, cy + ry - deck // 2],
+               outline=(228, 232, 234), width=max(2, deck // 5))
+    # 다리 조명
+    for i in range(40):
+        a = math.pi + math.pi * i / 39          # 위쪽 호
+        dr.ellipse([cx + math.cos(a) * rx - deck * .18, cy + math.sin(a) * ry - deck * .18,
+                    cx + math.cos(a) * rx + deck * .18, cy + math.sin(a) * ry + deck * .18],
+                   fill=(255, 250, 226))
+
+    img = img.resize((W, H), Image.LANCZOS)
+    # 글자가 잘 보이도록 위아래를 살짝 눌러 준다
+    sh = Image.new("L", (W, H), 0)
+    d2 = ImageDraw.Draw(sh)
+    for y in range(H):
+        t = y / H
+        d2.line([(0, y), (W, y)],
+                fill=int(120 * max(0, 1 - t / 0.5) + 70 * max(0, (t - 0.7) / 0.3)))
+    return Image.composite(Image.new("RGB", (W, H), (16, 34, 58)), img, sh)
+
+
+def background(W, H, path=None):
+    key = (W, H, path)
+    if key in _BG_CACHE:
+        return _BG_CACHE[key].copy()
+    img = None
+    if path and os.path.exists(path):
+        try:
+            src = Image.open(path).convert("RGB")
+            r = max(W / src.width, H / src.height)          # 화면을 채우도록 잘라 맞춘다
+            src = src.resize((max(W, int(src.width * r)), max(H, int(src.height * r))),
+                             Image.LANCZOS)
+            img = src.crop(((src.width - W) // 2, (src.height - H) // 2,
+                            (src.width - W) // 2 + W, (src.height - H) // 2 + H))
+        except Exception:
+            img = None
+    if img is None:
+        img = _sejong(W, H)
+    _BG_CACHE[key] = img
+    return img.copy()
 
 
 # ───────────────────────────────── 그리기 ─────────────────────────────────
@@ -271,243 +384,302 @@ def fit(dr, text, path, size, maxw, floor=9):
     return ImageFont.truetype(path, max(floor, size))
 
 
-def build_image(view, crew, size, fonts, source, icon_cols=ICON_COLS, scale=SCALE,
-                stamp=None):
-    W, H = size
-    bold, reg = fonts
-    dpi = H / 1080.0                                 # 화면 해상도 배율
-    s = dpi * scale                                  # 글자·간격 배율
-    S = lambda v: max(1, int(round(v * s)))
-    F = lambda p, sz: ImageFont.truetype(p, max(10, int(sz * s)))
+def glass(img, box, radius, alpha=140, blur=16, edge=110, tint=WHITE):
+    """배경을 흐려 유리판처럼 만든다. 글자가 사진 위에서도 읽히게 하는 장치."""
+    x0, y0, x1, y1 = (int(v) for v in box)
+    x0, y0 = max(0, x0), max(0, y0)
+    x1, y1 = min(img.width, x1), min(img.height, y1)
+    if x1 <= x0 or y1 <= y0:
+        return
+    reg = img.crop((x0, y0, x1, y1)).filter(ImageFilter.GaussianBlur(blur))
+    reg = Image.blend(reg, Image.new("RGB", reg.size, tint), alpha / 255.0)
+    mask = Image.new("L", reg.size, 0)
+    ImageDraw.Draw(mask).rounded_rectangle([0, 0, reg.width - 1, reg.height - 1],
+                                           radius=radius, fill=255)
+    img.paste(reg, (x0, y0), mask)
+    if edge:
+        ov = Image.new("RGBA", img.size, (0, 0, 0, 0))
+        ImageDraw.Draw(ov).rounded_rectangle([x0, y0, x1 - 1, y1 - 1], radius=radius,
+                                             outline=(255, 255, 255, edge), width=1)
+        img.paste(Image.alpha_composite(img.convert("RGBA"), ov).convert("RGB"), (0, 0))
 
-    img = Image.new("RGB", (W, H), BG)
-    dr = ImageDraw.Draw(img)
 
-    M = max(1, int(round(30 * dpi)))                 # 화면 가장자리 여백
-    # 아이콘은 화면 배율만 따르고 SCALE 과는 무관하다 (실제 아이콘 크기가 기준)
+def shadowed(dr, xy, text, font, fill=WHITE, blur=(0, 0, 0), a=90):
+    """사진 위 흰 글자에 옅은 그림자를 깔아 대비를 준다."""
+    dr.text((xy[0] + 1, xy[1] + 1), text, font=font, fill=tuple(int(c) for c in blur))
+    dr.text(xy, text, font=font, fill=fill)
+
+
+def layout(W, H, icon_cols=ICON_COLS, scale=SCALE):
+    """내용 상자의 자리를 정한다. (여백, 아이콘칸, x, y, 폭, 높이)
+
+    아이콘은 왼쪽 위부터 세로로 쌓이므로 그 폭(gutter)만큼은 비워 둔다.
+    상자는 오른쪽에 붙이고 세로 가운데에 놓는다.
+    """
+    dpi = H / 1080.0
+    M = max(1, int(round(30 * dpi)))
     gutter = int(round(ICON_COL_W * max(0, icon_cols) * dpi))
-
-    # 내용 상자 — 오른쪽에 붙이고 세로 가운데. 아이콘 자리를 침범하지 않는다.
     box_w = int((W - M * 2) * scale)
     box_w = max(min(box_w, W - M - (gutter + M)), int(W * 0.3))
     box_h = int((H - M * 2) * scale)
     x0 = W - M - box_w
     y0 = max(M, (H - box_h) // 2)
-    box_h = min(box_h, H - y0 - M)
+    return M, gutter, x0, y0, box_w, min(box_h, H - y0 - M)
 
-    G = S(20)                                        # 패널 사이 간격
-    RW = int(min(box_w * 0.27, S(430)))              # 오른쪽 전체 명단 폭
-    LW = box_w - RW - G                              # 왼쪽 폭
-    LX, RX, TOP = x0, x0 + box_w - RW, y0
-    BOT = y0 + box_h
 
-    # ── 1. 머리말 ──────────────────────────────────────────────────────
+def build_image(view, crew, size, fonts, source, icon_cols=ICON_COLS, scale=SCALE,
+                stamp=None, bg=None):
+    W, H = size
+    bold, reg, script = fonts
+    dpi = H / 1080.0
+    s = dpi * scale
+    S = lambda v: max(1, int(round(v * s)))
+    F = lambda p, sz: ImageFont.truetype(p, max(10, int(sz * s)))
+
+    img = background(W, H, bg)
+    dr = ImageDraw.Draw(img)
+
+    M, gutter, x0, y0, box_w, box_h = layout(W, H, icon_cols, scale)
+
+    G = S(18)
+    RW = int(min(box_w * 0.30, S(430)))          # 오른쪽 현재 근무자
+    LW = box_w - RW - G
+    LX, RX, TOP, BOT = x0, x0 + box_w - RW, y0, y0 + box_h
+
     d = view["date"]
-    f_brand = F(reg, 22)
-    f_date = F(bold, 52)
-    f_meta = F(reg, 23)
 
-    dr.text((LX, TOP), "4조 2교대 근무표", font=f_brand, fill=DIM)
-    y = TOP + S(32)
-    label = "%d년 %d월 %d일 (%s)" % (d.year, d.month, d.day, DOW[d.weekday()])
-    dr.text((LX, y), label, font=f_date, fill=FG)
-    lw = dr.textlength(label, font=f_date)
-    dr.text((LX + lw + S(18), y + S(24)),
-            "%d일차  ·  휴무 %s" % (view["nth"], "·".join(t + "조" for t in view["off"])),
-            font=f_meta, fill=MUTE)
-    head_b = y + S(66)
+    # ── 머리말 (사진 위에 바로) ────────────────────────────────────────
+    y = TOP
+    if BRAND_SCRIPT and BRAND_SCRIPT[0]:
+        f_sc = F(script, 26)
+        for i, ln in enumerate(BRAND_SCRIPT):
+            shadowed(dr, (LX, y + i * S(30)), ln, f_sc, (255, 255, 255), (30, 50, 80), 0)
+        y += S(30) * len(BRAND_SCRIPT) + S(10)
 
-    # ── 2. 오늘 근무 — 왼쪽 주간 / 오른쪽 야간 ────────────────────────
-    card_h = S(268)
-    cw = (LW - G) // 2
+    shadowed(dr, (LX, y), "4조 2교대 근무표", F(reg, 19), (226, 238, 250), (20, 40, 70))
+    y += S(28)
 
-    def shift_card(x, y, kind, team):
-        is_day = kind == "day"
-        col = DAY_C if is_day else NIGHT_C
-        bg = DAY_BG if is_day else NIGHT_BG
-        live = view["kind"] == kind
-        dr.rounded_rectangle([x, y, x + cw, y + card_h], radius=S(16), fill=bg,
-                             outline=col if live else None, width=S(2) if live else 0)
-        px, py = x + S(22), y + S(20)
-        iw = cw - S(44)
+    f_ym, f_dd = F(bold, 62), F(bold, 34)
+    ym = "%d. %02d" % (d.year, d.month)
+    shadowed(dr, (LX, y), ym, f_ym, WHITE, (18, 36, 62))
+    vx = LX + dr.textlength(ym, font=f_ym) + S(28)
+    dr.line([vx, y + S(8), vx, y + S(62)], fill=(255, 255, 255))
+    shadowed(dr, (vx + S(26), y + S(4)), "%d일 (%s)" % (d.day, DOW[d.weekday()]),
+             f_dd, WHITE, (18, 36, 62))
+    f_gr = F(reg, 17)
+    for i, ln in enumerate(GREETING):
+        shadowed(dr, (vx + S(28), y + S(48) + i * S(22)), ln, f_gr, (222, 236, 250), (20, 40, 70))
 
-        r = S(15)
-        if is_day:
-            draw_sun(dr, px + r, py + r, r, col)
-        else:
-            draw_moon(dr, px + r, py + r, int(r * .85), col, bg)
-        dr.text((px + S(44), py - S(4)), "주간" if is_day else "야간", font=F(bold, 30), fill=col)
-        dr.text((px + S(126), py - S(16)), team + "조", font=F(bold, 56), fill=col)
-
-        f_s = F(reg, 20)
-        clock = "08:00 – 20:00" if is_day else "20:00 – 08:00"
-        tw = dr.textlength(clock, font=f_s)
-        dr.text((px + iw - tw, py + S(6)), clock, font=f_s, fill=MUTE if live else DIM)
-        if live:
-            bw = dr.textlength("● 근무 중", font=f_s)
-            dr.text((px + iw - tw - bw - S(18), py + S(6)), "● 근무 중", font=f_s, fill=col)
-
-        yy = py + S(58)
-        lead = crew["crews"][team]["leader"]
-        dr.text((px, yy + S(5)), "교대조장", font=F(reg, 19), fill=DIM)
-        dr.text((px + S(86), yy - S(3)), lead or "미등록", font=F(bold, 30),
-                fill=FG if lead else DIM)
-        yy += S(48)
-
-        for p in PLANTS:
-            names = crew["crews"][team]["factories"][p]
-            chw, chh = S(56), S(29)
-            dr.rounded_rectangle([px, yy, px + chw, yy + chh], radius=S(6), fill=PANEL2)
-            f_p = F(reg, 19)
-            plw = dr.textlength(p + "공장", font=f_p)
-            dr.text((px + (chw - plw) / 2, yy + S(4)), p + "공장", font=f_p, fill=col)
-            txt = "  ".join(names) if names else "미등록"
-            dr.text((px + chw + S(14), yy + S(1)),
-                    txt, font=fit(dr, txt, bold, 26 * s, iw - chw - S(14)),
-                    fill=FG if names else DIM)
-            yy += S(38)
-
-    shift_card(LX, head_b, "day", view["day"])
-    shift_card(LX + cw + G, head_b, "night", view["night"])
-    shift_b = head_b + card_h
-
-    if view["dawn"]:
-        nd = view["night_date"]
-        dr.text((LX, shift_b + S(6)),
-                "※ 야간 %s조는 어제 %d/%d 20:00 시작 · 오늘 08:00 종료"
-                % (view["night"], nd.month, nd.day), font=F(reg, 19), fill=DIM)
-        shift_b += S(28)
-
-    # ── 3. 달력 — 날짜마다 주간/야간 조 ────────────────────────────────
-    cal_y = shift_b + S(24)
-    dr.rounded_rectangle([LX, cal_y, LX + LW, BOT], radius=S(16), fill=PANEL)
-    cpad = S(18)
-    cx0, cy0 = LX + cpad, cal_y + cpad
-    cw_in = LW - cpad * 2
-
-    dr.text((cx0, cy0), "%d월" % d.month, font=F(bold, 24), fill=FG)
-    f_lg = F(reg, 18)
-    lx = cx0 + cw_in
-    for lb, lc in (("● 야간", NIGHT_C), ("● 주간", DAY_C)):
+    # 범례 — 달력 오른쪽 위에 맞춰
+    f_lg = F(reg, 17)
+    lx = LX + LW
+    for lb, lc in (("야간", NIGHT_C), ("주간", DAY_C)):
         lx -= dr.textlength(lb, font=f_lg)
-        dr.text((lx, cy0 + S(4)), lb, font=f_lg, fill=lc)
-        lx -= S(18)
-    cy0 += S(36)
+        shadowed(dr, (lx, y + S(70)), lb, f_lg, (235, 244, 252), (20, 40, 70))
+        r = S(5)
+        dr.ellipse([lx - S(16) - r, y + S(78) - r, lx - S(16) + r, y + S(78) + r], fill=lc)
+        lx -= S(34)
 
-    cal = calendar.Calendar(firstweekday=0)           # 0 = 월요일
+    head_b = y + S(100)
+
+    # ── 달력 ───────────────────────────────────────────────────────────
+    foot_h = S(30) if FOOTER_LINE else 0
+    cal_box = (LX, head_b, LX + LW, BOT - foot_h)
+    glass(img, cal_box, S(18), alpha=132, blur=18)
+    dr = ImageDraw.Draw(img)
+
+    cpad = S(14)
+    cx0, cy0 = LX + cpad, head_b + cpad
+    cw_in, ch_in = LW - cpad * 2, (BOT - foot_h) - head_b - cpad * 2
+
+    cal = calendar.Calendar(firstweekday=6)          # 일요일 시작
     weeks = cal.monthdatescalendar(d.year, d.month)
     cols, rows = 7, len(weeks)
     colw = cw_in / cols
 
-    f_dow = F(reg, 18)
+    f_dow = F(bold, 15)
+    DOW_EN = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"]
     for i in range(cols):
-        c = SUN_C if i == 6 else (SAT_C if i == 5 else MUTE)
-        tw = dr.textlength(DOW[i], font=f_dow)
-        dr.text((cx0 + colw * i + (colw - tw) / 2, cy0), DOW[i], font=f_dow, fill=c)
-    cy0 += S(26)
+        c = SUN_C if i == 0 else (SAT_C if i == 6 else INK2)
+        tw = dr.textlength(DOW_EN[i], font=f_dow)
+        dr.text((cx0 + colw * i + (colw - tw) / 2, cy0 + S(4)), DOW_EN[i], font=f_dow, fill=c)
+    cy0 += S(30)
 
-    gap = S(4)
-    rowh = (BOT - cpad - cy0 - gap * (rows - 1)) / rows
-    f_day = F(bold, min(24, rowh / s * 0.30))
-    f_cell = F(bold, min(21, rowh / s * 0.26))
+    gap = S(5)
+    rowh = (ch_in - (cy0 - head_b - cpad) - gap * (rows - 1)) / rows
+    f_day = F(bold, min(23, rowh / s * 0.26))
+    f_tm = F(bold, min(17, rowh / s * 0.20))
+    br = max(S(6), int(rowh * 0.115))                # 주/야 동그라미 반지름
+    f_bd = F(bold, max(8, br * 1.15 / s))
 
     for ri, week in enumerate(weeks):
         for ci, cd in enumerate(week):
             x = cx0 + colw * ci
-            y = cy0 + (rowh + gap) * ri
-            x1, y1 = x + colw - gap, y + rowh
+            yy = cy0 + (rowh + gap) * ri
+            x1, y1 = x + colw - gap, yy + rowh
             other = cd.month != d.month
             today = cd == d
             dyt, ngt, _, _ = shift_of(cd)
 
             if today:
-                fillc = TODAY_BG
-            elif other:
-                fillc = BG
-            else:
-                fillc = PANEL3 if block_index(cd) % 2 else PANEL2
-            dr.rounded_rectangle([x, y, x1, y1], radius=S(8), fill=fillc,
-                                 outline=TODAY_C if today else None, width=S(2) if today else 0)
+                dr.rounded_rectangle([x, yy, x1, y1], radius=S(10), fill=TODAY_C)
+            elif not other:
+                glass(img, (x, yy, x1, y1), S(10), alpha=118, blur=8, edge=0)
+                dr = ImageDraw.Draw(img)
 
-            dc = DIM if other else (TODAY_C if today else
-                                    (SUN_C if ci == 6 else SAT_C if ci == 5 else FG))
-            dr.text((x + S(9), y + S(5)), str(cd.day), font=f_day, fill=dc)
+            dc = (WHITE if today else
+                  (150, 176, 200) if other else
+                  (SUN_C if ci == 0 else SAT_C if ci == 6 else INK))
+            dr.text((x + S(9), yy + S(5)), str(cd.day), font=f_day, fill=dc)
 
-            # 3일 묶음 시작일에 왼쪽 세로 막대
-            if not other and (cd - ANCHOR).days % 3 == 0:
-                dr.rounded_rectangle([x + S(2), y + S(7), x + S(4), y1 - S(7)],
-                                     radius=S(1), fill=LINE)
+            a = 0.42 if other else 1.0
+            base = TODAY_C if today else (190, 212, 230)
+            mix = lambda c: tuple(int(base[i] + (c[i] - base[i]) * a) for i in range(3))
+            tcol = WHITE if today else (INK if not other else (150, 176, 200))
 
-            a = 0.45 if other else 1.0
-            mix = lambda c: tuple(int(fillc[i] + (c[i] - fillc[i]) * a) for i in range(3))
-            bx = x + colw - gap - S(9)
-            for j, (tm, col) in enumerate(((dyt, DAY_C), (ngt, NIGHT_C))):
-                t = "주 " + tm if j == 0 else "야 " + tm
-                tw = dr.textlength(t, font=f_cell)
-                dr.text((bx - tw, y + rowh - S(4) - f_cell.size * (2 - j) - S(2) * (1 - j)),
-                        t, font=f_cell, fill=mix(col))
+            gy = yy + rowh - S(6) - (br * 2 + S(3)) * 2
+            for j, (tm, col, lb) in enumerate(((dyt, DAY_C, "주"), (ngt, NIGHT_C, "야"))):
+                by = gy + j * (br * 2 + S(3)) + br
+                tw = dr.textlength(tm, font=f_tm)
+                gw = br * 2 + S(5) + tw
+                bx = x + (colw - gap - gw) / 2 + br
+                dr.ellipse([bx - br, by - br, bx + br, by + br], fill=mix(col),
+                           outline=WHITE if today else None, width=max(1, S(2)) if today else 0)
+                lw = dr.textlength(lb, font=f_bd)
+                dr.text((bx - lw / 2, by - br * 0.82), lb, font=f_bd, fill=WHITE)
+                dr.text((bx + br + S(5), by - f_tm.size * 0.62), tm, font=f_tm, fill=tcol)
 
-    # ── 4. 오른쪽 — 전체 근무자 ───────────────────────────────────────
-    dr.rounded_rectangle([RX, TOP, RX + RW, BOT], radius=S(16), fill=PANEL)
-    rpad = S(20)
-    rx, ry = RX + rpad, TOP + rpad
-    rw = RW - rpad * 2
+    if FOOTER_LINE:
+        shadowed(dr, (LX, BOT - S(22)), FOOTER_LINE, F(reg, 14),
+                 (224, 238, 250), (18, 36, 62))
 
-    dr.text((rx, ry), "전체 근무자", font=F(bold, 26), fill=FG)
-    ry += S(40)
+    # ── 오른쪽 — 현재 근무자 ──────────────────────────────────────────
+    # 사진 위 흰 글자가 읽히도록 바탕을 짙게 깐다. 안쪽 카드는 반대로 밝게.
+    glass(img, (RX, TOP, RX + RW, BOT), S(18), alpha=150, blur=20, edge=90,
+          tint=(24, 52, 92))
+    dr = ImageDraw.Draw(img)
+    rpad = S(16)
+    rx, rw = RX + rpad, RW - rpad * 2
+    ry = TOP + rpad
 
-    live_teams = {view["day"]: "주간", view["night"]: "야간"}
-    f_pl = F(reg, 18)
+    dr.text((rx, ry), "현재 근무자", font=F(bold, 24), fill=WHITE)
+    f_s = F(reg, 14)
+    clock = "08:00 - 20:00" if view["kind"] == "day" else "20:00 - 08:00"
+    tw = dr.textlength(clock, font=f_s)
+    dr.text((rx + rw - tw, ry + S(10)), clock, font=f_s, fill=(206, 226, 246))
+    bw = dr.textlength("근무 중", font=f_s)
+    dr.text((rx + rw - tw - bw - S(12), ry + S(10)), "근무 중", font=f_s, fill=(206, 226, 246))
+    dr.ellipse([rx + rw - tw - bw - S(25), ry + S(14), rx + rw - tw - bw - S(17), ry + S(22)],
+               fill=(96, 216, 138))
+    ry += S(42)
 
-    for t in TEAMS:
-        c = crew["crews"][t]
-        col = TEAM_C[t]
-        badge = live_teams.get(t)
-        dr.rounded_rectangle([rx, ry, rx + S(30), ry + S(26)], radius=S(6), fill=col)
-        tw = dr.textlength(t, font=F(bold, 19))
-        dr.text((rx + (S(30) - tw) / 2, ry + S(3)), t, font=F(bold, 19), fill=BG)
-        dr.text((rx + S(40), ry + S(2)), c["leader"] or "미등록", font=F(bold, 21),
-                fill=FG if c["leader"] else DIM)
-        if badge:
-            bc = DAY_C if badge == "주간" else NIGHT_C
-            bw = dr.textlength(badge, font=f_pl)
-            dr.rounded_rectangle([rx + rw - bw - S(16), ry + S(2), rx + rw, ry + S(24)],
-                                 radius=S(5), fill=DAY_BG if badge == "주간" else NIGHT_BG)
-            dr.text((rx + rw - bw - S(8), ry + S(4)), badge, font=f_pl, fill=bc)
-        ry += S(32)
+    # 남는 세로 공간을 블록 사이에 고르게 나눠 아래까지 채운다
+    card_h = S(26) + S(30) + S(27) * len(PLANTS) + S(14)
+    f_st2 = F(reg, 15)
+    per = max(1, int((rw - S(28)) // (dr.textlength("홍길동  ", font=f_st2) or 1)))
+    st_lines = [crew["staff"][i:i + per] for i in range(0, len(crew["staff"]), per)] or [[]]
+    staff_h = S(32) + S(24) * len(st_lines) + S(10)
+    note_h = S(20) if view["dawn"] else 0
+    quote_h = S(34) if QUOTE else 0
+    slack = (BOT - rpad - ry) - (card_h * 2 + staff_h + note_h + quote_h)
+    if slack > 0:                       # 카드를 조금 키우고, 나머지를 사이 간격으로
+        grow = min(S(56), slack // 5)
+        card_h += grow
+        staff_h += min(S(22), slack // 8)
+        slack -= grow * 2 + min(S(22), slack // 8)
+    gapv = max(S(10), min(S(30), slack // 3)) if slack > 0 else S(8)
 
-        plw = max(dr.textlength(q + "공장", font=f_pl) for q in PLANTS) + S(12)
+    def crew_card(ry, kind, team):
+        is_day = kind == "day"
+        col = DAY_C if is_day else NIGHT_C
+        c = crew["crews"][team]
+        glass(img, (rx, ry, rx + rw, ry + card_h), S(12), alpha=205, blur=10, edge=160)
+        d2 = ImageDraw.Draw(img)
+        px, py = rx + S(14), ry + S(12)
+        iw = rw - S(28)
+
+        f_t = F(bold, 18)
+        tw2 = d2.textlength(team + "조", font=f_t)
+        d2.rounded_rectangle([px, py, px + tw2 + S(14), py + S(26)], radius=S(6), fill=col)
+        d2.text((px + S(7), py + S(3)), team + "조", font=f_t, fill=WHITE)
+        d2.text((px + tw2 + S(24), py + S(3)), "주간" if is_day else "야간",
+                font=F(bold, 18), fill=col)
+        if view["kind"] == kind:
+            lb, f_l = "● 근무 중", F(reg, 13)
+            d2.text((px + iw - d2.textlength(lb, font=f_l), py + S(7)), lb, font=f_l, fill=col)
+
+        py += S(32)
+        f_ld = F(reg, 14)
+        d2.text((px, py + S(4)), "교대조장", font=f_ld, fill=INK3)
+        # 작은 화면에서 이름이 라벨을 파고들던 자리. 라벨 폭을 재서 띄운다.
+        d2.text((px + d2.textlength("교대조장", font=f_ld) + S(12), py),
+                c["leader"] or "미등록", font=F(bold, 18), fill=INK if c["leader"] else INK3)
+        py += S(28)
+        d2.line([px, py - S(3), px + iw, py - S(3)], fill=(202, 218, 234))
+
+        f_p = F(reg, 14)
+        plw = max(d2.textlength(q + "공장", font=f_p) for q in PLANTS) + S(10)
+        step = max(S(27), (ry + card_h - S(12) - py) // len(PLANTS))
         for p in PLANTS:
             names = c["factories"][p]
-            dr.text((rx + S(2), ry + S(2)), p + "공장", font=f_pl, fill=DIM)
-            txt = " ".join(names) if names else "미등록"
-            dr.text((rx + S(2) + plw, ry),
-                    txt, font=fit(dr, txt, reg, 20 * s, rw - S(2) - plw),
-                    fill=MUTE if names else DIM)
-            ry += S(27)
-        ry += S(12)
+            d2.text((px, py + S(3)), p + "공장", font=f_p, fill=INK3)
+            txt = "  ".join(names) if names else "미등록"
+            d2.text((px + plw, py),
+                    txt, font=fit(d2, txt, bold, 16 * s, iw - plw),
+                    fill=INK if names else INK3)
+            py += step
+        return ry + card_h
 
-    ry += S(4)
-    dr.line([rx, ry, rx + rw, ry], fill=LINE, width=S(1))
-    ry += S(16)
-    dr.text((rx, ry), "상근", font=F(bold, 21), fill=FG)
-    dr.text((rx + S(50), ry + S(3)), "교대 없음", font=F(reg, 17), fill=DIM)
-    ry += S(30)
-    if crew["staff"]:
-        per = 3
-        for i in range(0, len(crew["staff"]), per):
-            txt = "  ".join(crew["staff"][i:i + per])
-            dr.text((rx + S(2), ry), txt, font=fit(dr, txt, reg, 20 * s, rw - S(4)), fill=MUTE)
-            ry += S(27)
-    else:
-        dr.text((rx + S(2), ry), "미등록", font=F(reg, 20), fill=DIM)
-        ry += S(27)
+    ry = crew_card(ry, "day", view["day"]) + gapv
+    ry = crew_card(ry, "night", view["night"])
+
+    if view["dawn"]:
+        nd = view["night_date"]
+        dr = ImageDraw.Draw(img)
+        dr.text((rx, ry + S(4)),
+                "※ 야간 %s조는 어제 %d/%d 20:00 시작" % (view["night"], nd.month, nd.day),
+                font=F(reg, 13), fill=(198, 220, 244))
+        ry += note_h
+    ry += gapv
+
+    glass(img, (rx, ry, rx + rw, ry + staff_h), S(12), alpha=205, blur=10, edge=160)
+    dr = ImageDraw.Draw(img)
+    f_sl = F(bold, 17)
+    dr.text((rx + S(14), ry + S(11)), "상근", font=f_sl, fill=INK)
+    dr.text((rx + S(14) + dr.textlength("상근", font=f_sl) + S(10), ry + S(15)),
+            "(교대 없음)", font=F(reg, 13), fill=INK3)
+    for i, ln in enumerate(st_lines):
+        dr.text((rx + S(14), ry + S(36) + i * S(24)),
+                "  ".join(ln) if ln else "미등록", font=f_st2, fill=INK2 if ln else INK3)
+    ry += staff_h + gapv
+
+    if QUOTE:
+        f_q = F(reg, 16)
+        qt = '"' + QUOTE + '"'
+        qw = dr.textlength(qt, font=f_q)
+        yq0 = max(ry, BOT - rpad - S(34))       # 글귀는 패널 바닥에 붙인다
+        dr.text((rx + (rw - qw) / 2, yq0), qt, font=f_q, fill=(224, 238, 250))
+        yq = yq0 + S(26)
+        dr.line([rx + rw * .3, yq, rx + rw * .7, yq], fill=(150, 180, 214))
+
+    # ── 상표 · 기준 시각 ───────────────────────────────────────────────
+    if BRAND_NAME:
+        f_b1, f_b2 = F(bold, 22), F(reg, 11)
+        bwid = dr.textlength(BRAND_NAME, font=f_b1)
+        shadowed(dr, (RX + RW - bwid, BOT + S(10)), BRAND_NAME, f_b1, WHITE, (12, 28, 52))
+        if BRAND_SUB:
+            sw = dr.textlength(BRAND_SUB, font=f_b2)
+            shadowed(dr, (RX + RW - sw, BOT + S(38)), BRAND_SUB, f_b2,
+                     (214, 230, 248), (12, 28, 52))
 
     if stamp is None:
         stamp = "%02d:%02d 기준 · 명단 %s" % (view["now"].hour, view["now"].minute, source)
-    f_st = F(reg, 17)
-    dr.text((rx + rw - dr.textlength(stamp, font=f_st), BOT - rpad - S(18)),
-            stamp, font=f_st, fill=DIM)
+    if stamp:
+        f_s2 = F(reg, 12)
+        shadowed(dr, (LX, BOT - S(22) - (S(16) if FOOTER_LINE else 0) - S(16)),
+                 "", f_s2)
+        sw = dr.textlength(stamp, font=f_s2)
+        shadowed(dr, (LX + LW - sw, BOT - S(20)), stamp, f_s2, (222, 236, 250), (18, 36, 62))
     return img
 
 
@@ -798,7 +970,16 @@ def main():
 
     icon_cols = int(opt("--icon-cols", ICON_COLS))
     scale = float(opt("--scale", SCALE))
-    img = build_image(view, crew, size, pick_font(font_override), source, icon_cols, scale)
+    # 배경 사진 — 스크립트 옆에 background.jpg 를 두면 그걸 쓴다
+    bg = opt("--bg")
+    if not bg:
+        here = os.path.dirname(os.path.abspath(__file__))
+        for n in ("background.jpg", "background.png", "background.jpeg"):
+            if os.path.exists(os.path.join(here, n)):
+                bg = os.path.join(here, n)
+                break
+    img = build_image(view, crew, size, pick_font(font_override), source, icon_cols,
+                      scale, bg=bg)
 
     if not out:
         base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
