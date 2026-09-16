@@ -619,6 +619,11 @@ TASK_XML = """<?xml version="1.0" encoding="UTF-16"?>
   <Triggers>
     <LogonTrigger><Enabled>true</Enabled></LogonTrigger>
     <CalendarTrigger>
+      <StartBoundary>2020-01-01T00:05:00</StartBoundary>
+      <Enabled>true</Enabled>
+      <ScheduleByDay><DaysInterval>1</DaysInterval></ScheduleByDay>
+    </CalendarTrigger>
+    <CalendarTrigger>
       <StartBoundary>2020-01-01T08:00:00</StartBoundary>
       <Enabled>true</Enabled>
       <ScheduleByDay><DaysInterval>1</DaysInterval></ScheduleByDay>
@@ -706,11 +711,12 @@ def install_task():
             f.write(xml)
         code, out = _run(["schtasks", "/Create", "/TN", TASK_NAME, "/XML", tmp, "/F"])
         if code == 0:
-            return True, "로그온 시 + 매일 08:00 · 20:00"
+            return True, "로그온 시 + 매일 00:05 · 08:00 · 20:00"
         # XML 등록이 막히면 트리거를 따로따로 만든다 (기능은 같고 밀린 실행 따라잡기만 없음)
         tr = '"%s" "%s"' % (exe, script)
         made = []
         for name, args in ((TASK_NAME, ["/SC", "ONLOGON"]),
+                           (TASK_NAME + "_0005", ["/SC", "DAILY", "/ST", "00:05"]),
                            (TASK_NAME + "_0800", ["/SC", "DAILY", "/ST", "08:00"]),
                            (TASK_NAME + "_2000", ["/SC", "DAILY", "/ST", "20:00"])):
             c, o = _run(["schtasks", "/Create", "/TN", name, "/TR", tr, "/F"] + args)
@@ -719,7 +725,7 @@ def install_task():
             else:
                 out = o or out
         if made:
-            return True, "로그온 시 + 매일 08:00 · 20:00 (작업 %d개)" % len(made)
+            return True, "로그온 시 + 매일 00:05 · 08:00 · 20:00 (작업 %d개)" % len(made)
         return False, out or "schtasks 등록 실패"
     finally:
         try:
@@ -730,7 +736,8 @@ def install_task():
 
 def uninstall_task():
     gone = []
-    for name in (TASK_NAME, TASK_NAME + "_0800", TASK_NAME + "_2000"):
+    for name in (TASK_NAME, TASK_NAME + "_0005",
+                 TASK_NAME + "_0800", TASK_NAME + "_2000"):
         code, _ = _run(["schtasks", "/Delete", "/TN", name, "/F"])
         if code == 0:
             gone.append(name)
