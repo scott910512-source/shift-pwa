@@ -47,15 +47,50 @@ ICON_COLS = 2       # 비워 둘 칸 수. 3, 4 로 올리면 더 비운다. 0 �
 
 1. **Python 설치** (안 깔려 있다면) — [python.org](https://www.python.org/downloads/)
    설치 화면에서 **`Add Python to PATH` 체크** 꼭 하세요.
-2. 이 `desktop` 폴더를 PC 아무 데나 두세요 (예: `C:\shift`)
+2. 압축을 풀어 아무 폴더에나 두세요 (예: `C:\shift`)
 3. **`install.bat` 더블클릭**
 
-끝입니다. Pillow 설치 → 바탕화면 생성 → 작업 스케줄러 등록까지 알아서 합니다.
+PowerShell 은 쓰지 않습니다. 파이썬이 직접 `schtasks` 로 등록합니다.
+
+> **이미 예전 버전을 깔았다면** 파일을 새 것으로 **덮어쓴 뒤** `install.bat` 을
+> 다시 실행하세요. 예전 `install.ps1` / `uninstall.ps1` 은 지워도 됩니다.
+
+## 인터넷
+
+**필요 없습니다.** 명단 40명과 상근 6명이 스크립트 안에 들어 있고,
+근무조는 날짜 계산이라 접속 없이도 정확합니다. 기본 설정에서는
+**아예 접속을 시도하지 않습니다.**
+
+Pillow(이미지 라이브러리)만 최초 1회 필요한데, 사내망에서 막히면
+인터넷 되는 PC 에서 [Pillow whl](https://pypi.org/project/pillow/#files) 을 받아
+옮긴 뒤 `pip install 파일이름.whl` 로 깔면 됩니다.
+
+명단이 바뀌면 `wallpaper.py` 만 새로 받아 덮어쓰세요 (재설치 불필요).
+회사 밖에서 최신 명단을 받아오고 싶으면 `python wallpaper.py --online`.
 
 ## 해제
 
 `uninstall.bat` 더블클릭. 자동 갱신만 멈추고 이미지는 그대로 남습니다.
-배경을 되돌리려면 바탕화면 오른쪽 클릭 → 개인 설정에서 고르세요.
+
+## 안 바뀔 때
+
+**`check.bat` 더블클릭.** 이런 게 나옵니다.
+
+```
+=== 점검 ===
+파이썬     : C:\Users\...\python.exe
+화면 크기  : 1920x1080
+지금 배경  : C:\Users\...\shift-wallpaper\wallpaper_a.png
+정책 차단  : 없음
+등록된 작업: 있음
+명단       : 내장 — 조원 40명, 상근 6명
+```
+
+- **정책 차단** 에 뭔가 나오면 → 회사 정책이 배경 변경을 막고 있습니다.
+  전산팀 문의가 필요하고, 그동안은 생성된 이미지를 직접 배경으로 지정하세요.
+- **지금 배경** 이 다른 파일이면 → 테마·배경 슬라이드쇼·보안 프로그램이
+  덮어쓰는 중입니다. 배경 슬라이드쇼를 끄고 다시 해 보세요.
+- **등록된 작업: 없음** 이면 → `install.bat` 을 다시 실행하세요.
 
 ## 언제 갱신되나
 
@@ -66,75 +101,80 @@ ICON_COLS = 2       # 비워 둘 칸 수. 3, 4 로 올리면 더 비운다. 0 �
 | 매일 20:00 | 야간 교대 반영 |
 | PC가 꺼져 있어 놓친 경우 | 켜면 바로 따라잡음 (`StartWhenAvailable`) |
 
-지금 당장 갱신하려면 `wallpaper.py` 를 더블클릭하거나
+지금 당장 갱신하려면 `install.bat` 을 다시 실행하거나,
 작업 스케줄러에서 `ShiftWallpaper` 를 우클릭 → 실행하면 됩니다.
 
 ## 명단은 어디서 오나
 
-배포된 `crew.json` 을 받아 씁니다. **명단이 바뀌어도 다시 설치할 필요가 없습니다.**
+**기본은 스크립트에 내장된 명단** (`wallpaper.py` 의 `FALLBACK`) 입니다.
+조원 40명 + 상근 6명이 통째로 들어 있어서 인터넷 없이 그대로 돕니다.
 
-- 인터넷 O → 최신 명단
-- 인터넷 X → 마지막으로 받아둔 값 (`%LOCALAPPDATA%\shift-wallpaper\crew.json`)
-- 한 번도 못 받았으면 → 스크립트에 내장된 명단 (`FALLBACK`)
+`--online` 을 붙였을 때만 이 순서로 시도합니다.
+
+- 받아지면 → 최신 명단 (`%LOCALAPPDATA%\shift-wallpaper\crew.json` 에 저장해 둠)
+- 안 받아지면 → 마지막으로 받아둔 값
+- 그것도 없으면 → 내장 명단
 
 내장 명단은 `node tools/sync-crew.js` 가 `app.js` 에서 자동으로 만들어 넣습니다.
 `wallpaper.py` 안의 `FALLBACK` 블록은 직접 고치지 마세요.
 
-근무 패턴 계산은 스크립트 안에서 하므로 인터넷이 없어도 조는 항상 정확합니다.
+근무 패턴 계산은 스크립트 안에서 하므로 어느 쪽이든 조는 항상 정확합니다.
 
 ## 직접 실행 (확인용)
 
 ```
 python wallpaper.py                                   # 생성 + 바탕화면 지정
+python wallpaper.py --install                         # 위 + 자동 갱신 등록
+python wallpaper.py --uninstall                       # 자동 갱신 해제
+python wallpaper.py --diag                            # 점검 (check.bat 과 같음)
 python wallpaper.py --no-set                          # 이미지만 생성
 python wallpaper.py --out test.png --size 1920x1080 --no-set
 python wallpaper.py --now 2026-09-02T03:00 --no-set   # 특정 시각으로 확인
-python wallpaper.py --crew ..\crew.json --no-set      # 로컬 명단으로 확인
+python wallpaper.py --icon-cols 3                     # 아이콘 자리 더 비우기
+python wallpaper.py --online                          # 최신 명단 받아오기
 ```
 
 ## 만든 파일이 어디 있나
 
-`%LOCALAPPDATA%\shift-wallpaper\` 에 이미지와 명단 캐시가 쌓입니다.
+`%LOCALAPPDATA%\shift-wallpaper\` 에 이미지가 쌓입니다.
 윈도우가 같은 파일명을 계속 쓰면 이전 이미지를 붙잡고 있는 일이 있어
 `wallpaper_a.png` / `wallpaper_b.png` 를 번갈아 씁니다.
 
 ## 잘 안 될 때
 
-**"파이썬을 찾지 못했습니다"**
-→ Python 설치 시 `Add Python to PATH` 를 안 켠 경우입니다. 재설치하거나
-   시스템 환경 변수 PATH 에 파이썬 폴더를 넣어 주세요.
+먼저 **`check.bat`** 을 돌려 보세요. 대부분 여기서 원인이 나옵니다.
+
+**`Python not found`**
+Python 설치 시 `Add Python to PATH` 를 안 켠 경우입니다. 재설치하거나
+시스템 환경 변수 PATH 에 파이썬 폴더를 넣어 주세요.
+
+**`CERTIFICATE_VERIFY_FAILED` 가 뜨면서 Pillow 설치 실패**
+사내망 보안 장비가 인증서를 갈아끼워서 pip 가 거부하는 경우입니다.
+인터넷 되는 PC 에서 [Pillow whl](https://pypi.org/project/pillow/#files) 을
+받아 옮긴 뒤 `pip install 파일이름.whl` 로 설치하고 다시 실행하세요.
 
 **바탕화면이 안 바뀜**
-→ 바탕화면 슬라이드 쇼가 켜져 있으면 덮어씁니다.
-   개인 설정 → 배경을 **`사진`** 으로 바꿔 주세요.
+`check.bat` 의 **정책 차단** 줄을 보세요.
+- 뭔가 나오면 → 회사 정책이 막는 중. 전산팀 문의가 필요합니다.
+- 없는데도 안 바뀌면 → 배경 슬라이드 쇼가 덮어씁니다.
+  개인 설정 → 배경을 **`사진`** 으로 바꾸고 다시 해 보세요.
+
+이제 지정에 실패하면 `완료` 라고 하지 않고 무엇이 막는지 알려 줍니다.
 
 **이미지는 생겼는데 글자가 깨짐**
-→ 맑은 고딕(`C:\Windows\Fonts\malgun.ttf`)이 없는 경우입니다.
-   `python wallpaper.py --font C:\Windows\Fonts\gulim.ttc` 처럼 지정해 보세요.
+맑은 고딕(`C:\Windows\Fonts\malgun.ttf`)이 없는 경우입니다.
+`python wallpaper.py --font C:\Windows\Fonts\gulim.ttc` 처럼 지정해 보세요.
+
+**예전 PowerShell 오류 / 안내 문구 한글 깨짐**
+PowerShell 을 아예 쓰지 않도록 바꿔서 더 이상 나지 않습니다.
+배치 파일은 영문만 쓰고, 한글 안내는 파이썬이 출력합니다.
+예전 `install.ps1` / `uninstall.ps1` 이 남아 있으면 지우세요.
+
+**1공장·3공장이 `미등록` 으로 나옴**
+예전 버전에서 내장 명단에 2공장만 들어 있던 문제입니다. 지금은 전체가 들어 있습니다.
 
 ## 아이맥 · 리눅스
 
 `--no-set` 으로 이미지 생성까지는 어디서나 됩니다.
 바탕화면 지정은 Windows 전용이라, 맥이라면 만들어진 PNG 를 시스템 설정에서
 직접 지정하거나 자동화(단축어)로 연결하셔야 합니다.
-
-
-## 잘 안 될 때
-
-**`CERTIFICATE_VERIFY_FAILED` 가 뜨면서 Pillow 설치 실패**
-사내망 보안 장비가 인증서를 갈아끼워서 pip 가 거부하는 경우입니다.
-`install.bat` 이 자동으로 PyPI 에 한해 인증서 검사를 건너뛰고 다시 시도합니다.
-그래도 안 되면 인터넷 되는 PC 에서 [Pillow whl](https://pypi.org/project/pillow/#files) 을
-받아 옮긴 뒤 `pip install 파일이름.whl` 로 설치하고 `install.bat` 을 다시 실행하세요.
-
-**1공장·3공장이 `미등록` 으로 나옴**
-`crew.json` 을 못 받아 내장 명단으로 떨어졌는데 그 명단이 비어 있던 문제입니다.
-지금은 전체 명단이 내장돼 있어 인터넷이 막혀 있어도 다 나옵니다.
-
-**PowerShell 에서 `-AllowStartIfOnBatteries ... is not recognized` 오류**
-줄 끝 역따옴표(`` ` ``) 줄잇기가 다운로드 과정에서 깨진 것입니다.
-지금은 줄잇기를 아예 쓰지 않습니다. 파일을 새로 받아 다시 실행하세요.
-
-**글자가 `?빳씩 以` 처럼 깨져 보임**
-`.ps1` 파일이 BOM 없이 저장되면 PowerShell 5.1 이 한글을 잘못 읽습니다.
-지금은 UTF-8 BOM 으로 저장돼 있습니다. 파일을 편집했다면 인코딩을 확인하세요.

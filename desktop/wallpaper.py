@@ -17,10 +17,15 @@
   python wallpaper.py --no-set        # 이미지만 생성 (지정하지 않음)
   python wallpaper.py --out a.png --size 1920x1080 --now 2026-09-15T03:00
   python wallpaper.py --icon-cols 3   # 아이콘이 세 줄이면 그만큼 더 비운다
+  python wallpaper.py --install       # 이미지 생성 + 작업 스케줄러 등록
+  python wallpaper.py --uninstall     # 자동 갱신 해제
+  python wallpaper.py --diag          # 왜 안 바뀌는지 점검
+  python wallpaper.py --online        # 최신 명단을 받아온다 (기본은 내장 명단)
 """
 
 import calendar
 import ctypes
+import io
 import json
 import math
 import os
@@ -29,6 +34,10 @@ import urllib.request
 
 from PIL import Image, ImageDraw, ImageFont
 
+# 명단은 아래 FALLBACK 에 전부 들어 있어서 인터넷이 없어도 그대로 돈다.
+# 사내망에서 막히면 기다리기만 하고 얻는 게 없으므로 기본은 접속하지 않는다.
+# 최신 명단을 받아오고 싶을 때만 --online 을 붙인다.
+USE_NETWORK = False
 CREW_URL = "https://scott910512-source.github.io/shift-pwa/crew.json"
 
 # 바탕화면 아이콘이 가리지 않도록 왼쪽을 몇 칸 비워 둘지.
@@ -137,8 +146,10 @@ def has_names(crew):
     return any(crew["crews"][t]["factories"][p] for t in TEAMS for p in PLANTS)
 
 
-def load_crew(url):
-    """최신 → 저장본 → 내장 명단 순으로 시도한다."""
+def load_crew(url, online=USE_NETWORK):
+    """내장 명단을 쓴다. --online 일 때만 최신 → 저장본 → 내장 순으로 시도한다."""
+    if not online:
+        return normalize(FALLBACK), "내장"
     path = cache_path()
     try:
         if url.startswith(("http://", "https://")):
@@ -496,19 +507,218 @@ def screen_size():
         return 1920, 1080
 
 
+# 회사 PC 는 정책으로 배경 변경을 막아 두는 일이 많다. 어디서 막혔는지 알려 준다.
+POLICY_KEYS = [
+    ("HKCU", r"Software\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop", "NoChangingWallPaper"),
+    ("HKCU", r"Software\Microsoft\Windows\CurrentVersion\Policies\System", "Wallpaper"),
+    ("HKCU", r"Software\Microsoft\Windows\CurrentVersion\Policies\System", "NoDispBackgroundPage"),
+    ("HKCU", r"Software\Microsoft\Windows\CurrentVersion\Policies\Explorer", "NoChangingWallPaper"),
+    ("HKLM", r"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System", "Wallpaper"),
+    ("HKLM", r"SOFTWARE\Policies\Microsoft\Windows\Personalization", "NoChangingWallPaper"),
+]
+
+
+def policy_blocks():
+    """배경 변경을 막는 정책이 걸려 있으면 그 목록을 돌려준다."""
+    try:
+        import winreg
+    except ImportError:
+        return []
+    roots = {"HKCU": winreg.HKEY_CURRENT_USER, "HKLM": winreg.HKEY_LOCAL_MACHINE}
+    hits = []
+    for r, sub, name in POLICY_KEYS:
+        try:
+            k = winreg.OpenKey(roots[r], sub)
+            try:
+                v, _ = winreg.QueryValueEx(k, name)
+            finally:
+                winreg.CloseKey(k)
+        except OSError:
+            continue
+        if v not in (0, "", None):
+            hits.append("%s\\%s\\%s = %r" % (r, sub, name, v))
+    return hits
+
+
+def registered_wallpaper():
+    """윈도우가 지금 배경으로 알고 있는 파일 경로."""
+    try:
+        import winreg
+        k = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Control Panel\Desktop")
+        try:
+            return winreg.QueryValueEx(k, "WallPaper")[0]
+        finally:
+            winreg.CloseKey(k)
+    except OSError:
+        return ""
+
+
 def set_wallpaper(path):
+    """바탕화면으로 지정하고, 정말 반영됐는지 되읽어서 확인한다.
+    돌려주는 값: (성공 여부, 설명)"""
+    path = os.path.abspath(path)
     try:
         import winreg
         k = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Control Panel\Desktop", 0, winreg.KEY_SET_VALUE)
-        winreg.SetValueEx(k, "WallpaperStyle", 0, winreg.REG_SZ, "10")   # 10 = 채우기
-        winreg.SetValueEx(k, "TileWallpaper", 0, winreg.REG_SZ, "0")
-        winreg.CloseKey(k)
+        try:
+            winreg.SetValueEx(k, "WallpaperStyle", 0, winreg.REG_SZ, "10")   # 10 = 채우기
+            winreg.SetValueEx(k, "TileWallpaper", 0, winreg.REG_SZ, "0")
+        finally:
+            winreg.CloseKey(k)
     except Exception:
         pass
+
     SPI_SETDESKWALLPAPER, SPIF_UPDATEINIFILE, SPIF_SENDCHANGE = 20, 1, 2
-    ok = ctypes.windll.user32.SystemParametersInfoW(
-        SPI_SETDESKWALLPAPER, 0, path, SPIF_UPDATEINIFILE | SPIF_SENDCHANGE)
-    return bool(ok)
+    called = bool(ctypes.windll.user32.SystemParametersInfoW(
+        SPI_SETDESKWALLPAPER, 0, path, SPIF_UPDATEINIFILE | SPIF_SENDCHANGE))
+
+    # 호출이 성공했다고 끝이 아니다. 레지스트리를 되읽어 진짜 바뀌었는지 본다.
+    got = registered_wallpaper()
+    stuck = os.path.normcase(os.path.normpath(got or "")) == os.path.normcase(path)
+    blocks = policy_blocks()
+
+    if stuck and called:
+        return True, "완료"
+    if blocks:
+        return False, ("회사 정책이 배경 변경을 막고 있습니다.\n     막는 설정: "
+                       + "\n                " + "\n                ".join(blocks)
+                       + "\n     → 전산팀에 문의하거나, 이미지를 직접 배경으로 지정해 보세요:\n     "
+                       + path)
+    if not stuck:
+        return False, ("지정은 했지만 윈도우가 되돌렸습니다. 지금 배경: %s\n     "
+                       "다른 프로그램(테마·배경 슬라이드쇼·보안 프로그램)이 덮어쓰는 중일 수 있습니다.\n     "
+                       "이미지는 여기 있으니 직접 지정해 보세요:\n     %s" % (got or "(없음)", path))
+    return False, "실패"
+
+
+# ───────────────────────── 작업 스케줄러 (PowerShell 없이) ─────────────────────────
+
+TASK_NAME = "ShiftWallpaper"
+
+TASK_XML = """<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>4jo 2gyodae wallpaper auto update</Description>
+  </RegistrationInfo>
+  <Triggers>
+    <LogonTrigger><Enabled>true</Enabled></LogonTrigger>
+    <CalendarTrigger>
+      <StartBoundary>2020-01-01T08:00:00</StartBoundary>
+      <Enabled>true</Enabled>
+      <ScheduleByDay><DaysInterval>1</DaysInterval></ScheduleByDay>
+    </CalendarTrigger>
+    <CalendarTrigger>
+      <StartBoundary>2020-01-01T20:00:00</StartBoundary>
+      <Enabled>true</Enabled>
+      <ScheduleByDay><DaysInterval>1</DaysInterval></ScheduleByDay>
+    </CalendarTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <UserId>{user}</UserId>
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowHardTerminate>true</AllowHardTerminate>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>
+    <IdleSettings>
+      <StopOnIdleEnd>false</StopOnIdleEnd>
+      <RestartOnIdle>false</RestartOnIdle>
+    </IdleSettings>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <Enabled>true</Enabled>
+    <Hidden>false</Hidden>
+    <RunOnlyIfIdle>false</RunOnlyIfIdle>
+    <WakeToRun>false</WakeToRun>
+    <ExecutionTimeLimit>PT5M</ExecutionTimeLimit>
+    <Priority>7</Priority>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>{exe}</Command>
+      <Arguments>{args}</Arguments>
+      <WorkingDirectory>{cwd}</WorkingDirectory>
+    </Exec>
+  </Actions>
+</Task>
+"""
+
+
+def _xml_escape(t):
+    return (t.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+             .replace('"', "&quot;"))
+
+
+def _pythonw():
+    """창이 뜨지 않는 pythonw.exe. 없으면 지금 쓰는 파이썬."""
+    exe = sys.executable
+    w = os.path.join(os.path.dirname(exe), "pythonw.exe")
+    return w if os.path.exists(w) else exe
+
+
+def _run(cmd):
+    import subprocess
+    r = subprocess.run(cmd, capture_output=True)
+    out = (r.stdout + r.stderr).decode("cp949", "replace").strip()
+    return r.returncode, out
+
+
+def install_task():
+    """작업 스케줄러에 등록한다. schtasks 만 쓰므로 PowerShell 이 필요 없다."""
+    import tempfile
+    script = os.path.abspath(__file__)
+    exe = _pythonw()
+    user = os.environ.get("USERNAME", "")
+    domain = os.environ.get("USERDOMAIN", "")
+    xml = TASK_XML.format(
+        user=_xml_escape(("%s\\%s" % (domain, user)) if domain else user),
+        exe=_xml_escape(exe),
+        args=_xml_escape('"%s"' % script),
+        cwd=_xml_escape(os.path.dirname(script)))
+
+    fd, tmp = tempfile.mkstemp(suffix=".xml")
+    os.close(fd)
+    try:
+        # schtasks /XML 은 UTF-16 파일을 요구한다
+        with io.open(tmp, "w", encoding="utf-16") as f:
+            f.write(xml)
+        code, out = _run(["schtasks", "/Create", "/TN", TASK_NAME, "/XML", tmp, "/F"])
+        if code == 0:
+            return True, "로그온 시 + 매일 08:00 · 20:00"
+        # XML 등록이 막히면 트리거를 따로따로 만든다 (기능은 같고 밀린 실행 따라잡기만 없음)
+        tr = '"%s" "%s"' % (exe, script)
+        made = []
+        for name, args in ((TASK_NAME, ["/SC", "ONLOGON"]),
+                           (TASK_NAME + "_0800", ["/SC", "DAILY", "/ST", "08:00"]),
+                           (TASK_NAME + "_2000", ["/SC", "DAILY", "/ST", "20:00"])):
+            c, o = _run(["schtasks", "/Create", "/TN", name, "/TR", tr, "/F"] + args)
+            if c == 0:
+                made.append(name)
+            else:
+                out = o or out
+        if made:
+            return True, "로그온 시 + 매일 08:00 · 20:00 (작업 %d개)" % len(made)
+        return False, out or "schtasks 등록 실패"
+    finally:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+
+
+def uninstall_task():
+    gone = []
+    for name in (TASK_NAME, TASK_NAME + "_0800", TASK_NAME + "_2000"):
+        code, _ = _run(["schtasks", "/Delete", "/TN", name, "/F"])
+        if code == 0:
+            gone.append(name)
+    return gone
 
 
 # ───────────────────────────────── 실행 ─────────────────────────────────
@@ -523,6 +733,29 @@ def main():
     font_override = opt("--font")
     out = opt("--out")
     no_set = "--no-set" in args
+    online = "--online" in args or opt("--crew") is not None
+
+    if "--uninstall" in args:
+        gone = uninstall_task()
+        print("자동 갱신 해제:", ", ".join(gone) if gone else "등록된 작업이 없습니다")
+        print("바탕화면 이미지는 그대로 남아 있습니다.")
+        return
+
+    if "--diag" in args:
+        print("=== 점검 ===")
+        print("파이썬     :", sys.executable)
+        print("스크립트   :", os.path.abspath(__file__))
+        print("화면 크기  : %dx%d" % screen_size())
+        print("지금 배경  :", registered_wallpaper() or "(없음)")
+        b = policy_blocks()
+        print("정책 차단  :", "\n             ".join(b) if b else "없음")
+        code, out2 = _run(["schtasks", "/Query", "/TN", TASK_NAME])
+        print("등록된 작업:", "있음" if code == 0 else "없음")
+        crew0, src0 = load_crew(url, online)
+        print("명단       : %s — 조원 %d명, 상근 %d명" %
+              (src0, sum(len(crew0["crews"][t]["factories"][p])
+                         for t in TEAMS for p in PLANTS), len(crew0["staff"])))
+        return
 
     now = now_kst()
     if opt("--now"):
@@ -534,7 +767,7 @@ def main():
     else:
         size = screen_size()
 
-    crew, source = load_crew(url)
+    crew, source = load_crew(url, online)
     view = current_view(now)
     view["now"] = now
 
@@ -565,9 +798,21 @@ def main():
           % (view["day"], view["night"], "·".join(view["off"]), source))
 
     if not no_set and sys.platform.startswith("win"):
-        print("바탕화면 지정:", "완료" if set_wallpaper(out) else "실패")
+        ok, why = set_wallpaper(out)
+        print("바탕화면 지정:", why)
     elif not no_set:
         print("바탕화면 지정은 Windows 에서만 동작합니다.")
+
+    if "--install" in args:
+        ok, why = install_task()
+        if ok:
+            print()
+            print("자동 갱신 등록 완료 —", why)
+            print("  지울 때는 uninstall.bat 을 실행하세요.")
+        else:
+            print()
+            print("자동 갱신 등록 실패:", why)
+            print("  바탕화면은 위에 나온 대로 바뀌었습니다. 자동 갱신만 안 걸린 상태입니다.")
 
 
 if __name__ == "__main__":
