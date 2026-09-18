@@ -49,7 +49,19 @@ if %H% GEQ 8 if %H% LSS 20 set "SLOT=d"
 set "IMG=%HERE%images\%TODAY%_%SLOT%.png"
 if not exist "%IMG%" goto NOIMG
 
-reg add "HKCU\Control Panel\Desktop" /v WallPaper /t REG_SZ /d "%IMG%" /f >nul
+rem 같은 파일명을 덮으면 윈도우가 이전 그림을 계속 쓰는 일이 있어 번갈아 쓴다
+set "OUTIMG=%HERE%_screen_a.png"
+reg query "HKCU\Control Panel\Desktop" /v WallPaper | find /i "_screen_a.png" >nul && set "OUTIMG=%HERE%_screen_b.png"
+
+rem 미리 그려 둔 그림은 크기가 고정이라, 화면 크기에 맞춰 여기서 다시 그린다.
+rem 이렇게 하면 어떤 해상도에서도 늘어나거나 잘리지 않는다.
+set "FIT=%OUTIMG%"
+del "%OUTIMG%" >nul 2>&1
+powershell -NoProfile -Command "try { Add-Type -AssemblyName System.Drawing; $v = Get-CimInstance Win32_VideoController | Where-Object { $_.CurrentHorizontalResolution -gt 0 } | Select-Object -First 1; $w = [int]$v.CurrentHorizontalResolution; $h = [int]$v.CurrentVerticalResolution; if ($w -lt 640) { exit 1 }; $im = [Drawing.Image]::FromFile($env:IMG); $bm = New-Object Drawing.Bitmap($w, $h); $g = [Drawing.Graphics]::FromImage($bm); $g.Clear([Drawing.Color]::FromArgb(8,11,16)); $g.InterpolationMode = 'HighQualityBicubic'; $r = [Math]::Min($w / $im.Width, $h / $im.Height); $nw = [int]($im.Width * $r); $nh = [int]($im.Height * $r); $g.DrawImage($im, [int](($w - $nw) / 2), [int](($h - $nh) / 2), $nw, $nh); $g.Dispose(); $im.Dispose(); $bm.Save($env:OUTIMG, [Drawing.Imaging.ImageFormat]::Png); $bm.Dispose() } catch { exit 1 }"
+
+if not exist "%FIT%" set "FIT=%IMG%"
+
+reg add "HKCU\Control Panel\Desktop" /v WallPaper /t REG_SZ /d "%FIT%" /f >nul
 rem 6 = 맞춤. 전체가 보이고 남는 곳은 배경색이라 잘려 나가지 않는다.
 reg add "HKCU\Control Panel\Desktop" /v WallpaperStyle /t REG_SZ /d 6 /f >nul
 reg add "HKCU\Control Panel\Desktop" /v TileWallpaper /t REG_SZ /d 0 /f >nul
@@ -110,6 +122,8 @@ schtasks /Delete /TN "ShiftWallpaper" /F >nul 2>&1
 schtasks /Delete /TN "ShiftWallpaper_0005" /F >nul 2>&1
 schtasks /Delete /TN "ShiftWallpaper_0800" /F >nul 2>&1
 schtasks /Delete /TN "ShiftWallpaper_2000" /F >nul 2>&1
+del "%~dp0_screen_a.png" >nul 2>&1
+del "%~dp0_screen_b.png" >nul 2>&1
 echo Scheduled tasks removed. The wallpaper image stays as it is.
 echo To change it: right-click the desktop - Personalize.
 echo.
