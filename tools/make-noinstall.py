@@ -50,7 +50,8 @@ set "IMG=%HERE%images\%TODAY%_%SLOT%.png"
 if not exist "%IMG%" goto NOIMG
 
 reg add "HKCU\Control Panel\Desktop" /v WallPaper /t REG_SZ /d "%IMG%" /f >nul
-reg add "HKCU\Control Panel\Desktop" /v WallpaperStyle /t REG_SZ /d 10 /f >nul
+rem 6 = 맞춤. 전체가 보이고 남는 곳은 배경색이라 잘려 나가지 않는다.
+reg add "HKCU\Control Panel\Desktop" /v WallpaperStyle /t REG_SZ /d 6 /f >nul
 reg add "HKCU\Control Panel\Desktop" /v TileWallpaper /t REG_SZ /d 0 /f >nul
 RUNDLL32.EXE user32.dll,UpdatePerUserSystemParameters 1, True
 echo Wallpaper set: %TODAY% (%SLOT%)
@@ -116,6 +117,34 @@ pause
 '''
 
 
+CHECK_BAT = r'''@echo off
+chcp 65001 >nul
+title Shift Wallpaper - Check
+setlocal
+set "HERE=%~dp0"
+set "PS=powershell -NoProfile -Command"
+
+echo.
+echo === Check ===
+for /f "delims=" %%a in ('%PS% "Get-CimInstance Win32_VideoController | Where-Object {$_.CurrentHorizontalResolution} | ForEach-Object {'{0}x{1}' -f $_.CurrentHorizontalResolution,$_.CurrentVerticalResolution}"') do echo 화면 해상도   : %%a
+for /f "delims=" %%a in ('%PS% "(Get-ItemProperty 'HKCU:\Control Panel\Desktop').WallPaper"') do echo 지금 배경     : %%a
+for /f "delims=" %%a in ('%PS% "$s=(Get-ItemProperty 'HKCU:\Control Panel\Desktop').WallpaperStyle; switch($s){'6'{'6 (맞춤)'}'10'{'10 (채우기)'}'2'{'2 (확대)'}'0'{'0 (가운데)'}default{$s}}"') do echo 까는 방식     : %%a
+for /f "delims=" %%a in ('%PS% "Add-Type -AssemblyName System.Drawing; $p=(Get-ItemProperty 'HKCU:\Control Panel\Desktop').WallPaper; if(Test-Path $p){$i=[Drawing.Image]::FromFile($p); '{0}x{1}' -f $i.Width,$i.Height; $i.Dispose()} else {'(파일 없음)'}"') do echo 배경 이미지   : %%a
+for /f "delims=" %%a in ('%PS% "Get-Date -Format yyyy-MM-dd"') do set "TODAY=%%a"
+if exist "%HERE%images\%TODAY%_d.png" (echo 오늘 그림     : 있음  %TODAY%) else (echo 오늘 그림     : 없음  %TODAY%  ^(묶음 기간이 끝났습니다^))
+echo 등록된 작업   :
+schtasks /Query /TN "ShiftWallpaper" >nul 2>&1 && echo    ShiftWallpaper
+schtasks /Query /TN "ShiftWallpaper_0005" >nul 2>&1 && echo    ShiftWallpaper_0005
+schtasks /Query /TN "ShiftWallpaper_0800" >nul 2>&1 && echo    ShiftWallpaper_0800
+schtasks /Query /TN "ShiftWallpaper_2000" >nul 2>&1 && echo    ShiftWallpaper_2000
+echo.
+echo 화면 해상도와 배경 이미지 크기가 많이 다르면 늘어나거나 흐려집니다.
+echo 그 숫자를 알려 주시면 맞는 크기로 다시 만들어 드립니다.
+echo.
+pause
+'''
+
+
 def readme(start, end, n, size):
     return """4조 2교대 근무표 — PC 바탕화면 (파이썬 없이)
 
@@ -144,6 +173,10 @@ def readme(start, end, n, size):
 
 ■ 지울 때
    uninstall.bat 더블클릭. 이미지는 그대로 남습니다.
+
+■ 크기가 안 맞을 때
+   check.bat 을 실행하면 화면 해상도와 배경 이미지 크기를 보여 줍니다.
+   둘이 많이 다르면 늘어나거나 흐려집니다. 그 숫자를 알려 주세요.
 
 ■ 안 바뀔 때
    · 회사 정책이 배경 변경을 막고 있을 수 있습니다. 전산팀에 문의하세요.
@@ -200,7 +233,8 @@ def main():
     end = start + dt.timedelta(days=days - 1)
     for name, text in (("apply.bat", APPLY_BAT),
                        ("install.bat", INSTALL_BAT),
-                       ("uninstall.bat", UNINSTALL_BAT)):
+                       ("uninstall.bat", UNINSTALL_BAT),
+                       ("check.bat", CHECK_BAT)):
         # 배치는 CRLF 로. apply.bat 만 한글 주석이 있어 UTF-8 로 둔다.
         io.open(os.path.join(out, name), "w", encoding="utf-8", newline="").write(
             text.replace("\r\n", "\n").replace("\n", "\r\n"))

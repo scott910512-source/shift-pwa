@@ -258,6 +258,11 @@ FOOTER_LINE  = "SAFETY · PEOPLE · TECHNOLOGY · SUSTAINABILITY"
 GREETING     = ("오늘도 안전하게,", "좋은 하루 되세요.")
 QUOTE        = "안전이 최고의 생산성입니다."
 
+# 바탕화면에 까는 방식. 6 = 맞춤(전체가 보이고 남는 곳은 배경색),
+# 10 = 채우기(화면을 꽉 채우되 넘치는 부분은 잘라냄).
+# 배경이 검정이라 잘려 나가지 않는 "맞춤"이 안전하다.
+WALLPAPER_STYLE = "6"
+
 # 화면 크기를 잘못 잡으면 (1920, 1080) 처럼 직접 적는다. None 이면 자동 감지.
 # check.bat 을 돌리면 지금 어떻게 재고 있는지 보여 준다.
 SCREEN = None
@@ -869,7 +874,7 @@ def set_wallpaper(path):
         import winreg
         k = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Control Panel\Desktop", 0, winreg.KEY_SET_VALUE)
         try:
-            winreg.SetValueEx(k, "WallpaperStyle", 0, winreg.REG_SZ, "10")   # 10 = 채우기
+            winreg.SetValueEx(k, "WallpaperStyle", 0, winreg.REG_SZ, WALLPAPER_STYLE)
             winreg.SetValueEx(k, "TileWallpaper", 0, winreg.REG_SZ, "0")
         finally:
             winreg.CloseKey(k)
@@ -1068,6 +1073,17 @@ def main():
         for k, v in probe.items():
             print("%-10s : %s" % (k, "%dx%d" % v if isinstance(v, tuple) else v))
         print("고른 크기  : %dx%d%s" % (pick[0], pick[1], "  (SCREEN 으로 지정됨)" if SCREEN else ""))
+        try:
+            import winreg as _wr
+            _k = _wr.OpenKey(_wr.HKEY_CURRENT_USER, r"Control Panel\Desktop")
+            try:
+                _st = _wr.QueryValueEx(_k, "WallpaperStyle")[0]
+            finally:
+                _wr.CloseKey(_k)
+            print("까는 방식  : %s (%s)" % (_st, {"6": "맞춤", "10": "채우기",
+                                                 "2": "확대", "0": "가운데"}.get(str(_st), "?")))
+        except OSError:
+            pass
         cur = registered_wallpaper()
         if cur and os.path.exists(cur):
             try:
