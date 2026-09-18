@@ -1153,7 +1153,9 @@ def main():
             pass
 
     img.save(out)
-    print("이미지 저장:", out)
+    print("이미지 저장: %s  (%dx%d)" % (out, img.size[0], img.size[1]))
+    if not opt("--size") and not SCREEN:
+        print("화면 크기  : %dx%d  — 두 값이 다르면 늘어나거나 잘립니다" % size)
     print("오늘: 주간 %s조 / 야간 %s조 / 휴무 %s · 명단 %s"
           % (view["day"], view["night"], "·".join(view["off"]), source))
 
