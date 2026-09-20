@@ -399,15 +399,76 @@ def background(W, H, path=None):
 
 # ───────────────────────────────── 그리기 ─────────────────────────────────
 
-def fit(dr, text, path, size, maxw, floor=9):
+# 같은 숫자를 줘도 글꼴마다 실제로 그려지는 크기가 다르다. 칸은 숫자로 잡고
+# 글자는 글꼴이 그리므로, 보정하지 않으면 윈도우(맑은 고딕)에서 칸을 넘친다.
+# 기준은 이 코드를 맞춰 둔 나눔고딕 — 크기 100 에서 오름+내림 = 115.
+REF_METRIC = 115
+_FONT_K = {}
+
+
+def font_k(path):
+    """기준 글꼴과 같은 높이로 보이게 하는 크기 보정 배수."""
+    if path not in _FONT_K:
+        try:
+            a, d = ImageFont.truetype(path, 100).getmetrics()
+            _FONT_K[path] = REF_METRIC / float(a + d) if a + d else 1.0
+        except Exception:
+            _FONT_K[path] = 1.0
+    return _FONT_K[path]
+
+
+def load_font(path, size):
+    return ImageFont.truetype(path, max(8, int(round(size * font_k(path)))))
+
+
+def line_h(font):
+    """한 줄이 실제로 차지하는 높이."""
+    a, d = font.getmetrics()
+    return a + d
+
+
+def line_step(font, want):
+    """줄 간격. 글꼴이 크면 겹치지 않게 밀어 준다."""
+    return max(int(want), int(line_h(font) * 1.12))
+
+
+def fit(dr, text, path, size, maxw, floor=8):
     """maxw 안에 들어올 때까지 글꼴을 줄인다. 이름이 잘리는 것보다 낫다."""
     size = int(size)
     while size > floor:
-        fnt = ImageFont.truetype(path, size)
+        fnt = load_font(path, size)
         if dr.textlength(text, font=fnt) <= maxw:
             return fnt
         size -= 1
-    return ImageFont.truetype(path, max(floor, size))
+    return load_font(path, floor)
+
+
+def wrap_names(dr, names, path, size, maxw, floor=8):
+    """이름들을 실제 폭을 재서 줄로 나눈다. (글꼴, 줄들)
+
+    글자 수로 어림잡으면 글꼴이 바뀔 때 줄이 넘쳐 옆 칸을 파고든다.
+    """
+    if not names:
+        return load_font(path, size), [["미등록"]]
+    size = int(size)
+    while size > floor:
+        fnt = load_font(path, size)
+        lines, cur = [], []
+        for n in names:
+            trial = cur + [n]
+            if cur and dr.textlength("  ".join(trial), font=fnt) > maxw:
+                lines.append(cur)
+                cur = [n]
+            else:
+                cur = trial
+        if cur:
+            lines.append(cur)
+        if len(lines) <= 2 and all(dr.textlength("  ".join(l), font=fnt) <= maxw
+                                   for l in lines):
+            return fnt, lines
+        size -= 1
+    fnt = load_font(path, floor)
+    return fnt, [names]
 
 
 def glass(img, box, radius, alpha=140, blur=16, edge=110, tint=WHITE):
@@ -460,7 +521,7 @@ def build_image(view, crew, size, fonts, source, icon_cols=ICON_COLS, scale=SCAL
     dpi = H / 1080.0
     s = dpi * scale
     S = lambda v: max(1, int(round(v * s)))
-    F = lambda p, sz: ImageFont.truetype(p, max(10, int(sz * s)))
+    F = lambda p, sz: load_font(p, sz * s)
 
     img = background(W, H, bg)
     dr = ImageDraw.Draw(img)
@@ -474,16 +535,19 @@ def build_image(view, crew, size, fonts, source, icon_cols=ICON_COLS, scale=SCAL
     # ── 머리말 (사진 위에 바로) ────────────────────────────────────────
     y = TOP
     if BRAND_SCRIPT and BRAND_SCRIPT[0]:
-        f_sc = F(script, 23)
+        f_sc = fit(dr, max(BRAND_SCRIPT, key=len), script, 23 * s, box_w * 0.4)
+        st = line_step(f_sc, S(26))
         for i, ln in enumerate(BRAND_SCRIPT):
-            shadowed(dr, (LX, y + i * S(26)), ln, f_sc, WHITE, (30, 50, 80))
-        y += S(26) * len(BRAND_SCRIPT) + S(4)
+            shadowed(dr, (LX, y + i * st), ln, f_sc, WHITE, (30, 50, 80))
+        y += st * len(BRAND_SCRIPT) + S(4)
 
     shadowed(dr, (LX, y), "4조 2교대 근무표", F(reg, 18), (222, 236, 250), (20, 40, 70))
     y += S(25)
 
     f_ym, f_dd = F(bold, 54), F(bold, 30)
     ym = "%d. %02d" % (d.year, d.month)
+    if dr.textlength(ym, font=f_ym) > box_w * 0.3:
+        f_ym = fit(dr, ym, bold, 54 * s, box_w * 0.3)
     shadowed(dr, (LX, y), ym, f_ym, WHITE, (18, 36, 62))
     vx = LX + dr.textlength(ym, font=f_ym) + S(24)
     dr.line([vx, y + S(8), vx, y + S(54)], fill=WHITE)
@@ -506,13 +570,15 @@ def build_image(view, crew, size, fonts, source, icon_cols=ICON_COLS, scale=SCAL
              "휴무  " + " · ".join(t + "조" for t in view["off"]),
              F(reg, 17), (218, 234, 250), (20, 40, 70))
 
-    f_gr = F(reg, 16)                      # 인사말은 오른쪽 끝에
-    for i, ln in enumerate(GREETING):
-        gw = dr.textlength(ln, font=f_gr)
-        shadowed(dr, (LX + box_w - gw, y + S(14) + i * S(21)), ln, f_gr,
-                 (222, 236, 250), (20, 40, 70))
+    if GREETING and GREETING[0]:           # 인사말은 오른쪽 끝에
+        f_gr = fit(dr, max(GREETING, key=len), reg, 16 * s, box_w * 0.25)
+        gst = line_step(f_gr, S(21))
+        for i, ln in enumerate(GREETING):
+            gw = dr.textlength(ln, font=f_gr)
+            shadowed(dr, (LX + box_w - gw, y + S(12) + i * gst), ln, f_gr,
+                     (222, 236, 250), (20, 40, 70))
 
-    head_b = y + S(76)
+    head_b = y + max(S(76), line_step(f_dd, S(46)) + S(30))
     # ── 오른쪽: 전체 근무자 (세로로 길게) ─────────────────────────────
     foot_h = S(26) if FOOTER_LINE else 0
     RW = int(min(box_w * 0.30, S(440)))
@@ -534,10 +600,9 @@ def build_image(view, crew, size, fonts, source, icon_cols=ICON_COLS, scale=SCAL
     f_pl = F(reg, 15)
     plw = max(dr.textlength(q + "공장", font=f_pl) for q in PLANTS) + S(10)
 
-    f_st2 = F(reg, 17)
-    per = max(1, int(rw // (dr.textlength("홍길동  ", font=f_st2) or 1)))
-    st_lines = [crew["staff"][i:i + per] for i in range(0, len(crew["staff"]), per)] or [[]]
-    staff_h = S(32) + S(26) * len(st_lines)
+    f_st2, st_lines = wrap_names(dr, crew["staff"], reg, 17 * s, rw - S(4))
+    st_step = line_step(f_st2, S(26))
+    staff_h = S(32) + st_step * len(st_lines)
     team_h = (inner - staff_h - S(14) - S(10) * 4) // 4     # 조마다 같은 높이로 나눈다
     team_h = max(S(104), team_h)
 
@@ -555,8 +620,11 @@ def build_image(view, crew, size, fonts, source, icon_cols=ICON_COLS, scale=SCAL
         tb = dr.textlength(t, font=f_t)
         dr.rounded_rectangle([px2, py2, px2 + tb + S(18), py2 + S(26)], radius=S(6), fill=col)
         dr.text((px2 + S(9), py2 + S(2)), t, font=f_t, fill=(14, 18, 24))
-        dr.text((px2 + tb + S(30), py2 + S(1)), c["leader"] or "미등록",
-                font=F(bold, 20), fill=FG if c["leader"] else INK3)
+        nx2 = px2 + tb + S(30)
+        dr.text((nx2, py2 + S(1)), c["leader"] or "미등록",
+                font=fit(dr, c["leader"] or "미등록", bold, 20 * s,
+                         px2 + iw2 - nx2 - S(34)),
+                fill=FG if c["leader"] else INK3)
         if on:
             f_b = F(bold, 14)
             dr.text((px2 + iw2 - dr.textlength(on[0], font=f_b), py2 + S(6)),
@@ -564,16 +632,16 @@ def build_image(view, crew, size, fonts, source, icon_cols=ICON_COLS, scale=SCAL
 
         py2 += S(32)
         room2 = (ry + team_h - S(8)) - py2
-        step = max(S(24), room2 / len(PLANTS))
-        lh2 = S(20)
+        step = max(line_step(f_pl, S(24)), room2 / len(PLANTS))
         for i2, p in enumerate(PLANTS):
             names = c["factories"][p]
-            ly2 = py2 + step * i2 + (step - lh2) / 2
-            dr.text((px2, ly2 + S(3)), p + "공장", font=f_pl, fill=INK3)
             txt = " ".join(names) if names else "미등록"
-            dr.text((px2 + plw, ly2),
-                    txt, font=fit(dr, txt, reg, 18 * s, iw2 - plw),
-                    fill=INK2 if names else INK3)
+            f_n2 = fit(dr, txt, reg, 18 * s, iw2 - plw)
+            lh2 = max(line_h(f_n2), line_h(f_pl))
+            ly2 = py2 + step * i2 + (step - lh2) / 2
+            dr.text((px2, ly2 + (lh2 - line_h(f_pl)) / 2 + S(1)), p + "공장",
+                    font=f_pl, fill=INK3)
+            dr.text((px2 + plw, ly2), txt, font=f_n2, fill=INK2 if names else INK3)
         ry += team_h + S(10)
 
     dr.line([rx, ry - S(2), rx + rw, ry - S(2)], fill=LINE, width=max(1, S(1)))
@@ -584,8 +652,9 @@ def build_image(view, crew, size, fonts, source, icon_cols=ICON_COLS, scale=SCAL
             "(교대 없음)", font=F(reg, 14), fill=INK3)
     ry += S(28)
     for i, ln in enumerate(st_lines):
-        dr.text((rx + S(2), ry + i * S(26)),
-                "  ".join(ln) if ln else "미등록", font=f_st2, fill=INK2 if ln else INK3)
+        txt = "  ".join(ln) if isinstance(ln, list) else str(ln)
+        dr.text((rx + S(2), ry + i * st_step), txt, font=f_st2,
+                fill=INK2 if crew["staff"] else INK3)
 
     # ── 왼쪽 위: 현재 근무자 (크게) ───────────────────────────────────
     avail = (BOT - foot_h) - head_b
@@ -633,8 +702,10 @@ def build_image(view, crew, size, fonts, source, icon_cols=ICON_COLS, scale=SCAL
         py += S(45)
         f_ld = F(reg, 15)
         d2.text((px, py + S(5)), "교대조장", font=f_ld, fill=INK3)
-        d2.text((px + d2.textlength("교대조장", font=f_ld) + S(14), py),
-                c["leader"] or "미등록", font=F(bold, 21), fill=FG if c["leader"] else INK3)
+        lx2 = px + d2.textlength("교대조장", font=f_ld) + S(14)
+        d2.text((lx2, py), c["leader"] or "미등록",
+                font=fit(d2, c["leader"] or "미등록", bold, 21 * s, px + iw - lx2),
+                fill=FG if c["leader"] else INK3)
         py += S(32)
         d2.line([px, py - S(4), px + iw, py - S(4)], fill=LINE)
 
@@ -643,16 +714,16 @@ def build_image(view, crew, size, fonts, source, icon_cols=ICON_COLS, scale=SCAL
         # 남은 칸을 셋으로 나누고, 각 줄을 제 칸의 세로 가운데에 놓는다.
         # (예전엔 위로 몰리고 아래가 남았다)
         room = (cy_ + ch_ - S(10)) - py
-        step = max(S(26), room / len(PLANTS))
-        lh = S(22)
+        step = max(line_step(f_p, S(26)), room / len(PLANTS))
         for i, p in enumerate(PLANTS):
             names = c["factories"][p]
-            ly = py + step * i + (step - lh) / 2
-            d2.text((px, ly + S(4)), p + "공장", font=f_p, fill=INK3)
             txt = "   ".join(names) if names else "미등록"
-            d2.text((px + plw2, ly),
-                    txt, font=fit(d2, txt, bold, 21 * s, iw - plw2),
-                    fill=FG if names else INK3)
+            f_n = fit(d2, txt, bold, 21 * s, iw - plw2)
+            lh = max(line_h(f_n), line_h(f_p))
+            ly = py + step * i + (step - lh) / 2
+            d2.text((px, ly + (lh - line_h(f_p)) / 2 + S(2)), p + "공장",
+                    font=f_p, fill=INK3)
+            d2.text((px + plw2, ly), txt, font=f_n, fill=FG if names else INK3)
 
     shift_card(LX + hp, "day", view["day"])
     shift_card(LX + hp + cwid + S(12), "night", view["night"])
@@ -704,7 +775,7 @@ def build_image(view, crew, size, fonts, source, icon_cols=ICON_COLS, scale=SCAL
     f_day = F(bold, min(18, rowh / s * 0.30))
     f_tm = F(bold, min(14, rowh / s * 0.24))
     br = max(S(5), int(rowh * 0.14))
-    f_bd = F(bold, max(7, br * 1.1 / s))
+    f_bd = load_font(bold, max(7, br * 1.25))
 
     for ri, week in enumerate(weeks):
         for ci, cd in enumerate(week):
@@ -737,26 +808,31 @@ def build_image(view, crew, size, fonts, source, icon_cols=ICON_COLS, scale=SCAL
                 bx = x + (colw - gap - gw) / 2 + br
                 dr.ellipse([bx - br, by - br, bx + br, by + br], fill=mix(col),
                            outline=WHITE if today else None, width=max(1, S(2)) if today else 0)
-                lw = dr.textlength(lb, font=f_bd)
-                dr.text((bx - lw / 2, by - br * 0.82), lb, font=f_bd, fill=(14, 18, 24))
+                bb = f_bd.getbbox(lb)
+                dr.text((bx - (bb[0] + bb[2]) / 2, by - (bb[1] + bb[3]) / 2),
+                        lb, font=f_bd, fill=(14, 18, 24))
                 dr.text((bx + br + S(4), by - f_tm.size * 0.62), tm, font=f_tm, fill=tcol)
 
+    half = (LWid - S(20)) / 2.0            # 왼쪽 구호 / 오른쪽 글귀가 만나지 않게
     if FOOTER_LINE:
-        dr.text((LX, BOT - S(19)), FOOTER_LINE, font=F(reg, 13), fill=INK3)
+        dr.text((LX, BOT - S(19)), FOOTER_LINE,
+                font=fit(dr, FOOTER_LINE, reg, 13 * s, half), fill=INK3)
     if QUOTE:
-        f_q = F(reg, 14)
         qt = '"' + QUOTE + '"'
+        f_q = fit(dr, qt, reg, 14 * s, half)
         dr.text((LX + LWid - dr.textlength(qt, font=f_q), BOT - S(19)), qt,
                 font=f_q, fill=(126, 140, 158))
 
     # ── 상표 · 기준 시각 ───────────────────────────────────────────────
     right = LX + box_w
     if BRAND_NAME:
-        f_b1, f_b2 = F(bold, 21), F(reg, 11)
+        f_b1 = fit(dr, BRAND_NAME, bold, 21 * s, box_w * 0.3)
         shadowed(dr, (right - dr.textlength(BRAND_NAME, font=f_b1), BOT + S(12)),
                  BRAND_NAME, f_b1, FG, (0, 0, 0))
         if BRAND_SUB:
-            shadowed(dr, (right - dr.textlength(BRAND_SUB, font=f_b2), BOT + S(38)),
+            f_b2 = fit(dr, BRAND_SUB, reg, 11 * s, box_w * 0.4)
+            shadowed(dr, (right - dr.textlength(BRAND_SUB, font=f_b2),
+                          BOT + S(12) + line_step(f_b1, S(26))),
                      BRAND_SUB, f_b2, INK3, (0, 0, 0))
 
     if stamp is None:
