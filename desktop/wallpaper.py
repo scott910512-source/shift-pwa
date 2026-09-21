@@ -263,6 +263,15 @@ QUOTE        = "안전이 최고의 생산성입니다."
 # 배경이 검정이라 잘려 나가지 않는 "맞춤"이 안전하다.
 WALLPAPER_STYLE = "6"
 
+# 이 파일의 판. 화면 구석과 check.bat 에 찍히므로 옛 파일이 도는지 바로 안다.
+VERSION = "v13"
+
+# 화면보다 작게 그리면 윈도우가 늘려서 글자가 커지고 흐려진다.
+# 반대로 크게 그리면 줄여서 깔끔하다. 그래서 감지값이 틀려도 안전하도록
+# 최소 이 크기 이상으로 그린다 (가로세로 비율은 감지값 그대로 유지).
+MIN_RENDER = (2560, 1440)
+MAX_RENDER = (3840, 2160)
+
 # 화면 크기를 잘못 잡으면 (1920, 1080) 처럼 직접 적는다. None 이면 자동 감지.
 # check.bat 을 돌리면 지금 어떻게 재고 있는지 보여 준다.
 SCREEN = None
@@ -836,7 +845,8 @@ def build_image(view, crew, size, fonts, source, icon_cols=ICON_COLS, scale=SCAL
                      BRAND_SUB, f_b2, INK3, (0, 0, 0))
 
     if stamp is None:
-        stamp = "%02d:%02d 기준 · 명단 %s" % (view["now"].hour, view["now"].minute, source)
+        stamp = "%02d:%02d 기준 · 명단 %s · %s" % (
+            view["now"].hour, view["now"].minute, source, VERSION)
     if stamp:
         f_s2 = F(reg, 12)
         dr.text((LX, BOT + S(14)), stamp, font=f_s2, fill=INK3)
@@ -894,6 +904,18 @@ def screen_size():
     if SCREEN:
         return tuple(SCREEN)
     return screen_probe()[1]
+
+
+def render_size(screen):
+    """실제로 그릴 크기. 화면 비율은 그대로 두고 최소 크기 이상으로 키운다.
+
+    화면보다 크게 그려 두면 윈도우가 줄여서 깔끔하게 깐다. 반대로 작게
+    그리면 늘려서 글자가 커지고 흐려진다. 감지가 틀려도 안전한 쪽으로 둔다.
+    """
+    w, h = screen
+    k = max(MIN_RENDER[0] / float(w), MIN_RENDER[1] / float(h), 1.0)
+    k = min(k, MAX_RENDER[0] / float(w), MAX_RENDER[1] / float(h))
+    return max(w, int(round(w * k))), max(h, int(round(h * k)))
 
 
 # 회사 PC 는 정책으로 배경 변경을 막아 두는 일이 많다. 어디서 막혔는지 알려 준다.
@@ -1143,12 +1165,14 @@ def main():
 
     if "--diag" in args:
         print("=== 점검 ===")
+        print("wallpaper.py 판 :", VERSION)
         print("파이썬     :", sys.executable)
         print("스크립트   :", os.path.abspath(__file__))
         probe, pick = screen_probe()
         for k, v in probe.items():
             print("%-10s : %s" % (k, "%dx%d" % v if isinstance(v, tuple) else v))
         print("고른 크기  : %dx%d%s" % (pick[0], pick[1], "  (SCREEN 으로 지정됨)" if SCREEN else ""))
+        print("그릴 크기  : %dx%d  (작게 그리면 늘어나므로 넉넉히)" % render_size(pick))
         try:
             import winreg as _wr
             _k = _wr.OpenKey(_wr.HKEY_CURRENT_USER, r"Control Panel\Desktop")
@@ -1190,8 +1214,10 @@ def main():
     if opt("--size"):
         w, h = opt("--size").lower().split("x")
         size = (int(w), int(h))
+        draw_at = size
     else:
         size = screen_size()
+        draw_at = render_size(size)
 
     crew, source = load_crew(url, online)
     view = current_view(now)
@@ -1207,7 +1233,7 @@ def main():
             if os.path.exists(os.path.join(here, n)):
                 bg = os.path.join(here, n)
                 break
-    img = build_image(view, crew, size, pick_font(font_override), source, icon_cols,
+    img = build_image(view, crew, draw_at, pick_font(font_override), source, icon_cols,
                       scale, bg=bg)
 
     if not out:
@@ -1229,9 +1255,9 @@ def main():
             pass
 
     img.save(out)
-    print("이미지 저장: %s  (%dx%d)" % (out, img.size[0], img.size[1]))
-    if not opt("--size") and not SCREEN:
-        print("화면 크기  : %dx%d  — 두 값이 다르면 늘어나거나 잘립니다" % size)
+    print("[%s] 이미지 저장: %s  (%dx%d)" % (VERSION, out, img.size[0], img.size[1]))
+    if not opt("--size"):
+        print("        화면 %dx%d 로 재고, 그보다 크게 그려 줄여서 깝니다." % size)
     print("오늘: 주간 %s조 / 야간 %s조 / 휴무 %s · 명단 %s"
           % (view["day"], view["night"], "·".join(view["off"]), source))
 
