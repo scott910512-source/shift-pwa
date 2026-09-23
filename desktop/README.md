@@ -130,6 +130,21 @@ Pillow(이미지 라이브러리)만 최초 1회 필요한데, 사내망에서 �
 | 매일 20:00 | 야간 교대 반영 |
 | PC가 꺼져 있어 놓친 경우 | 켜면 바로 따라잡음 (`StartWhenAvailable`) |
 
+## 어디에 깔리나
+
+`install.bat` 은 `wallpaper.py` 를 **고정 자리로 복사한 뒤 그 자리를 등록**합니다.
+
+```
+%LOCALAPPDATA%\shift-wallpaper\app\wallpaper.py
+```
+
+압축을 새 폴더에 풀어도, 옛 폴더의 옛 파일이 계속 도는 일이 없습니다.
+**새 판을 받으면 압축을 아무 데나 풀고 `install.bat` 만 누르면 됩니다.**
+(위쪽 상수를 고쳤다면 `install.bat` 을 다시 눌러야 그 내용이 깔립니다)
+
+바탕화면 오른쪽 아래와 `check.bat` 에 **판 번호**가 찍힙니다. 화면의 번호가
+받은 것과 다르면 옛 파일이 도는 것이니 `install.bat` 을 다시 실행하세요.
+
 작업 이름은 **`ShiftWallpaper`** 하나입니다 (`Win+R` → `taskschd.msc`).
 `install.bat` 을 여러 번 눌러도 **같은 이름을 덮어쓰기만 하므로 쌓이지 않습니다.**
 이미지도 `wallpaper_a.png` / `wallpaper_b.png` 두 개를 번갈아 쓸 뿐입니다.

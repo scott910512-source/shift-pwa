@@ -31,6 +31,7 @@ import io
 import json
 import math
 import os
+import re
 import sys
 import urllib.request
 
@@ -264,7 +265,7 @@ QUOTE        = "안전이 최고의 생산성입니다."
 WALLPAPER_STYLE = "6"
 
 # 이 파일의 판. 화면 구석과 check.bat 에 찍히므로 옛 파일이 도는지 바로 안다.
-VERSION = "v13"
+VERSION = "v14"
 
 # 화면보다 작게 그리면 윈도우가 늘려서 글자가 커지고 흐려진다.
 # 반대로 크게 그리면 줄여서 깔끔하다. 그래서 감지값이 틀려도 안전하도록
@@ -1087,10 +1088,65 @@ def _run(cmd):
     return r.returncode, out
 
 
+def app_dir():
+    """늘 같은 자리. 압축을 어디에 풀든 여기 있는 것이 돈다."""
+    base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+    d = os.path.join(base, "shift-wallpaper", "app")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def installed_script():
+    return os.path.join(app_dir(), "wallpaper.py")
+
+
+def file_version(path):
+    """그 파일이 몇 판인지 읽는다. 옛 파일이 도는지 확인하는 용도."""
+    try:
+        with io.open(path, encoding="utf-8") as f:
+            for line in f:
+                m = re.match(r'\s*VERSION\s*=\s*["\'](.+?)["\']', line)
+                if m:
+                    return m.group(1)
+    except (OSError, UnicodeDecodeError):
+        pass
+    return "?"
+
+
+def task_command():
+    """작업 스케줄러가 실제로 무엇을 실행하는지 읽는다."""
+    code, out = _run(["schtasks", "/Query", "/TN", TASK_NAME, "/FO", "LIST", "/V"])
+    if code != 0:
+        return ""
+    for line in out.splitlines():
+        if line.lower().startswith(("task to run", "실행할 작업")):
+            return line.split(":", 1)[1].strip()
+    return ""
+
+
 def install_task():
-    """작업 스케줄러에 등록한다. schtasks 만 쓰므로 PowerShell 이 필요 없다."""
+    """작업 스케줄러에 등록한다. schtasks 만 쓰므로 PowerShell 이 필요 없다.
+
+    스크립트를 고정 자리로 복사한 뒤 그 자리를 등록한다. 압축을 새 폴더에
+    풀어도 옛 폴더의 옛 파일이 계속 도는 일을 없애기 위해서다.
+    """
+    import shutil
     import tempfile
-    script = os.path.abspath(__file__)
+
+    here = os.path.abspath(__file__)
+    script = installed_script()
+    if os.path.normcase(here) != os.path.normcase(script):
+        shutil.copy2(here, script)
+        # 배경 사진을 옆에 뒀다면 같이 옮긴다
+        for n in ("background.jpg", "background.png", "background.jpeg"):
+            src = os.path.join(os.path.dirname(here), n)
+            if os.path.exists(src):
+                shutil.copy2(src, os.path.join(app_dir(), n))
+    print("설치 위치 : %s  (%s)" % (script, file_version(script)))
+
+    # 옛 등록이 다른 폴더를 가리키고 있을 수 있다. 모두 지우고 새로 만든다.
+    for n in [TASK_NAME] + EXTRA_TASKS:
+        _run(["schtasks", "/Delete", "/TN", n, "/F"])
     exe = _pythonw()
     user = os.environ.get("USERNAME", "")
     domain = os.environ.get("USERDOMAIN", "")
@@ -1108,9 +1164,6 @@ def install_task():
             f.write(xml)
         code, out = _run(["schtasks", "/Create", "/TN", TASK_NAME, "/XML", tmp, "/F"])
         if code == 0:
-            # 예전에 보조 작업으로 깔렸다면 지운다. 안 지우면 같은 시각에 두 번 돈다.
-            for n in EXTRA_TASKS:
-                _run(["schtasks", "/Delete", "/TN", n, "/F"])
             return True, "로그온 시 + 매일 00:05 · 08:00 · 20:00"
         # XML 등록이 막히면 트리거를 따로따로 만든다 (기능은 같고 밀린 실행 따라잡기만 없음)
         tr = '"%s" "%s"' % (exe, script)
@@ -1165,7 +1218,19 @@ def main():
 
     if "--diag" in args:
         print("=== 점검 ===")
-        print("wallpaper.py 판 :", VERSION)
+        print("지금 이 파일 : %s  (%s)" % (os.path.abspath(__file__), VERSION))
+        ins = installed_script()
+        if os.path.exists(ins):
+            v = file_version(ins)
+            print("깔린 파일    : %s  (%s)%s"
+                  % (ins, v, "" if v == VERSION else "   ← 다릅니다! install.bat 을 다시"))
+        else:
+            print("깔린 파일    : 없음 — install.bat 을 실행하세요")
+        cmd = task_command()
+        if cmd:
+            print("작업이 도는 것: %s" % cmd)
+            if os.path.normcase(ins) not in os.path.normcase(cmd):
+                print("             ← 엉뚱한 곳을 가리킵니다! install.bat 을 다시 실행하세요")
         print("파이썬     :", sys.executable)
         print("스크립트   :", os.path.abspath(__file__))
         probe, pick = screen_probe()
