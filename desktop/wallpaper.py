@@ -23,6 +23,8 @@
   python wallpaper.py --diag          # 왜 안 바뀌는지 점검
   python wallpaper.py --online        # 최신 명단을 받아온다 (기본은 내장 명단)
   python wallpaper.py --bg 사진.jpg    # 배경 (사진 경로 / black / sejong)
+  python wallpaper.py --detect        # 화면 크기를 자동으로 재서 쓴다
+  python wallpaper.py --preview a.png # 바탕화면은 그대로 두고 그림만 뽑는다
 """
 
 import calendar
@@ -265,7 +267,7 @@ QUOTE        = "안전이 최고의 생산성입니다."
 WALLPAPER_STYLE = "6"
 
 # 이 파일의 판. 화면 구석과 check.bat 에 찍히므로 옛 파일이 도는지 바로 안다.
-VERSION = "v14"
+VERSION = "v15"
 
 # 화면보다 작게 그리면 윈도우가 늘려서 글자가 커지고 흐려진다.
 # 반대로 크게 그리면 줄여서 깔끔하다. 그래서 감지값이 틀려도 안전하도록
@@ -273,9 +275,13 @@ VERSION = "v14"
 MIN_RENDER = (2560, 1440)
 MAX_RENDER = (3840, 2160)
 
-# 화면 크기를 잘못 잡으면 (1920, 1080) 처럼 직접 적는다. None 이면 자동 감지.
-# check.bat 을 돌리면 지금 어떻게 재고 있는지 보여 준다.
-SCREEN = None
+# ── 화면 크기 ────────────────────────────────────────────────────────
+# 자동 감지는 실행 방식(작업 스케줄러 / 손으로 실행)에 따라 다른 값을 줘서
+# 돌 때마다 크기가 들쭉날쭉했다. 그래서 고정값을 기본으로 쓴다.
+# 내 모니터 해상도로 바꾸면 된다. check.bat 이 실제 해상도를 알려 준다.
+SCREEN = (1920, 1080)
+
+# 그래도 자동으로 잡고 싶으면 None 으로 두거나 --detect 를 붙인다.
 
 # 배경. "black" 또는 "sejong"(세종호수공원·이응다리 그림) 또는 사진 파일 경로.
 # 스크립트 옆에 background.jpg 를 두면 그 사진이 우선한다.
@@ -901,8 +907,8 @@ def screen_probe():
     return got, (max(ok, key=lambda wh: wh[0] * wh[1]) if ok else (1920, 1080))
 
 
-def screen_size():
-    if SCREEN:
+def screen_size(detect=False):
+    if SCREEN and not detect:
         return tuple(SCREEN)
     return screen_probe()[1]
 
@@ -1207,7 +1213,9 @@ def main():
     url = opt("--crew", CREW_URL)
     font_override = opt("--font")
     out = opt("--out")
-    no_set = "--no-set" in args
+    no_set = "--no-set" in args or bool(opt("--preview"))
+    if opt("--preview"):
+        out = opt("--preview")          # 바탕화면은 건드리지 않고 그림만 뽑는다
     online = "--online" in args or opt("--crew") is not None
 
     if "--uninstall" in args:
@@ -1236,7 +1244,12 @@ def main():
         probe, pick = screen_probe()
         for k, v in probe.items():
             print("%-10s : %s" % (k, "%dx%d" % v if isinstance(v, tuple) else v))
-        print("고른 크기  : %dx%d%s" % (pick[0], pick[1], "  (SCREEN 으로 지정됨)" if SCREEN else ""))
+        print("고른 크기  : %dx%d  (자동 감지 결과)" % pick)
+        print("실제 쓰는 값: %dx%d  %s" % (screen_size() +
+              ("(SCREEN 고정값)" if SCREEN else "(자동 감지)",)))
+        if SCREEN and tuple(SCREEN) != pick:
+            print("             ← 감지값과 다릅니다. 위 '자동 감지 결과' 가 맞다면")
+            print("               wallpaper.py 의 SCREEN 을 그 값으로 바꾸세요.")
         print("그릴 크기  : %dx%d  (작게 그리면 늘어나므로 넉넉히)" % render_size(pick))
         try:
             import winreg as _wr
@@ -1281,7 +1294,7 @@ def main():
         size = (int(w), int(h))
         draw_at = size
     else:
-        size = screen_size()
+        size = screen_size("--detect" in args)
         draw_at = render_size(size)
 
     crew, source = load_crew(url, online)
@@ -1322,7 +1335,9 @@ def main():
     img.save(out)
     print("[%s] 이미지 저장: %s  (%dx%d)" % (VERSION, out, img.size[0], img.size[1]))
     if not opt("--size"):
-        print("        화면 %dx%d 로 재고, 그보다 크게 그려 줄여서 깝니다." % size)
+        print("        화면 %dx%d %s · 그보다 크게 그려 줄여서 깝니다."
+              % (size[0], size[1],
+                 "(자동 감지)" if ("--detect" in args or not SCREEN) else "(고정값)"))
     print("오늘: 주간 %s조 / 야간 %s조 / 휴무 %s · 명단 %s"
           % (view["day"], view["night"], "·".join(view["off"]), source))
 
