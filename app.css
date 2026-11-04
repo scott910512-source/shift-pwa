@@ -442,3 +442,42 @@ textarea.inp{ min-height:120px; padding:10px 12px; font-family:var(--fm);
   .chip{ font-size:9px; }
   .ib-clock{ font-size:21px; }
 }
+
+/* ===== 조 설정 잠금 ===== */
+.lockpan{
+  background:var(--card-2); border:1px solid var(--line);
+  border-radius:16px; padding:28px 20px; text-align:center;
+  display:flex; flex-direction:column; align-items:center; gap:10px;
+}
+.lock-ico{ font-size:34px; line-height:1; }
+.lock-t{ font-size:17px; font-weight:800; color:var(--fg); }
+.lock-b{ font-size:13px; color:var(--fg-2); }
+.lock-in{
+  width:100%; max-width:260px; margin-top:6px;
+  background:var(--card-3); border:1px solid var(--line); border-radius:10px;
+  color:var(--fg); font-size:20px; letter-spacing:.3em; text-align:center;
+  padding:12px 14px; -webkit-appearance:none; appearance:none;
+}
+.lock-in.sm{ font-size:15px; letter-spacing:normal; text-align:left; margin-top:8px; max-width:none; }
+.lock-in:focus{ outline:2px solid var(--day); outline-offset:1px; }
+.lock-msg{ font-size:13px; color:var(--red); min-height:18px; }
+.lock-hint{ font-size:12px; color:var(--fg-2); margin-top:2px; }
+.lockpan .btn{ max-width:260px; }
+
+.lockbar{
+  display:flex; align-items:center; justify-content:space-between;
+  background:var(--card-2); border:1px solid var(--line);
+  border-radius:12px; padding:8px 10px 8px 14px; margin-bottom:12px;
+}
+.lockbar-t{ font-size:13px; color:var(--fg-2); }
+.btn.sm{ padding:6px 12px; font-size:13px; width:auto; }
+
+@keyframes lockshake{
+  0%,100%{ transform:translateX(0); }
+  20%{ transform:translateX(-7px); } 40%{ transform:translateX(7px); }
+  60%{ transform:translateX(-4px); } 80%{ transform:translateX(4px); }
+}
+.lockpan.shake{ animation:lockshake .32s; }
+@media (prefers-reduced-motion: reduce){ .lockpan.shake{ animation:none; } }
+.pinbox{ padding:0 12px 12px; display:flex; flex-direction:column; gap:0; }
+.pinbox .btn{ margin-top:10px; }

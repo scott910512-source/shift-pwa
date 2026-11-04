@@ -137,6 +137,32 @@
     { key: '3', label: '3공장' }
   ];
 
+  /* ========== 조 설정 잠금 ========== */
+  // 남이 무심코 명단을 건드리는 것을 막는 용도입니다.
+  // 브라우저 안에서 도는 코드라 작정하고 들여다보면 뚫립니다. 자물쇠지 금고가 아닙니다.
+
+  var DEFAULT_PIN = '0000';
+  var crewUnlocked = false;      // 앱을 다시 열면 다시 잠깁니다
+  var pinTries = 0;
+
+  function pinHash(pin) {
+    // 저장소에 비밀번호를 그대로 두지 않으려고 섞어 둡니다.
+    var str = 'shift-pwa:pin:' + String(pin), a = 0x811c9dc5, b = 0x1505;
+    for (var i = 0; i < str.length; i++) {
+      var c = str.charCodeAt(i);
+      a = ((a ^ c) * 0x01000193) >>> 0;
+      b = (((b << 5) + b) + c) >>> 0;
+    }
+    return a.toString(16) + '-' + b.toString(16);
+  }
+  function pinOk(pin) { return pinHash(pin) === DATA.settings.pin; }
+  function requireUnlock() {
+    if (crewUnlocked) return true;
+    toast('조 설정 탭에서 잠금을 먼저 해제하세요');
+    return false;
+  }
+  function isDefaultPin() { return DATA.settings.pin === pinHash(DEFAULT_PIN); }
+
   /* ========== 저장소 ========== */
 
   var STORE_KEY = 'shift-pwa:data:v1';
@@ -144,7 +170,7 @@
   function defaults() {
     return {
       version: 1, seedVersion: SEED_VERSION, edited: false,
-      crews: seedCrews(), settings: { theme: 'dark' }
+      crews: seedCrews(), settings: { theme: 'dark', pin: pinHash(DEFAULT_PIN) }
     };
   }
 
@@ -155,7 +181,7 @@
       seedVersion: (typeof raw.seedVersion === 'number' && isFinite(raw.seedVersion)) ? raw.seedVersion : 0,
       edited: raw.edited === true,
       crews: {},
-      settings: { theme: 'dark' }
+      settings: { theme: 'dark', pin: pinHash(DEFAULT_PIN) }
     };
     var rc = (raw.crews && typeof raw.crews === 'object') ? raw.crews : {};
     for (var i = 0; i < TEAMS.length; i++) {
@@ -177,6 +203,8 @@
     }
     var th = raw.settings && raw.settings.theme;
     out.settings.theme = (th === 'light' || th === 'auto') ? th : 'dark';
+    var pn = raw.settings && raw.settings.pin;
+    if (typeof pn === 'string' && pn) out.settings.pin = pn;
     return out;
   }
 
@@ -666,10 +694,77 @@
 
   function ensureDraft() { if (!draft) draft = deepCopyCrews(); }
 
+  function renderCrewLock() {
+    var body = $('crewSetBody');
+    clear(body);
+
+    var pan = el('div', 'lockpan');
+    pan.appendChild(el('div', 'lock-ico', '\uD83D\uDD12'));
+    pan.appendChild(el('div', 'lock-t', '조 설정이 잠겨 있습니다'));
+    pan.appendChild(el('div', 'lock-b', '명단을 고치려면 비밀번호를 입력하세요.'));
+
+    var inp = el('input', 'lock-in');
+    inp.type = 'password';
+    inp.inputMode = 'numeric';
+    inp.autocomplete = 'off';
+    inp.maxLength = 12;
+    inp.placeholder = '••••';
+    inp.setAttribute('aria-label', '비밀번호');
+    pan.appendChild(inp);
+
+    var msg = el('div', 'lock-msg');
+    pan.appendChild(msg);
+
+    function tryUnlock() {
+      var v = inp.value;
+      if (!v) { msg.textContent = '비밀번호를 입력하세요.'; return; }
+      if (pinOk(v)) {
+        crewUnlocked = true; pinTries = 0;
+        renderCrewSet();
+        toast('잠금을 해제했습니다');
+      } else {
+        pinTries++;
+        inp.value = '';
+        msg.textContent = '비밀번호가 다릅니다.' + (pinTries >= 3 ? ' (' + pinTries + '회 틀림)' : '');
+        pan.classList.remove('shake');
+        void pan.offsetWidth;                 // 애니메이션을 다시 트리거
+        pan.classList.add('shake');
+        inp.focus();
+      }
+    }
+
+    var ok = el('button', 'btn pri wide', '잠금 해제');
+    ok.type = 'button';
+    ok.addEventListener('click', tryUnlock);
+    inp.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); tryUnlock(); }
+    });
+    pan.appendChild(ok);
+
+    if (isDefaultPin()) {
+      pan.appendChild(el('div', 'lock-hint', '초기 비밀번호는 0000 입니다. 바꿔서 쓰세요.'));
+    }
+    body.appendChild(pan);
+    body.appendChild(el('p', 'note',
+      '잊어버렸다면 설정 → 앱 데이터 지우기로 초기화할 수 있습니다. ' +
+      '다만 이 휴대폰에서 고친 명단도 함께 사라집니다.'));
+  }
+
   function renderCrewSet() {
+    if (!crewUnlocked) { renderCrewLock(); return; }
     ensureDraft();
     var body = $('crewSetBody');
     clear(body);
+
+    var lockbar = el('div', 'lockbar');
+    lockbar.appendChild(el('span', 'lockbar-t', '잠금 해제됨'));
+    var lk = el('button', 'btn sm', '잠그기');
+    lk.type = 'button';
+    lk.addEventListener('click', function () {
+      crewUnlocked = false; renderCrewSet(); toast('잠갔습니다');
+    });
+    lockbar.appendChild(lk);
+    body.appendChild(lockbar);
 
     if (seedUpdateAvailable) {
       var nb = el('div', 'notice');
@@ -680,6 +775,7 @@
       var nba = el('button', 'btn pri wide', '배포된 기본 명단 적용');
       nba.type = 'button';
       nba.addEventListener('click', function () {
+        if (!requireUnlock()) return;
         if (!window.confirm('직접 수정한 명단을 버리고 배포된 명단으로 맞춥니다. 계속할까요?')) return;
         adoptSeed(); renderAll(); toast('기본 명단을 적용했습니다');
       });
@@ -780,6 +876,47 @@
     body.appendChild(bar);
     body.appendChild(el('p', 'note',
       '이름을 비워두고 저장하면 그 칸은 자동으로 삭제됩니다. 수정한 내용은 이 휴대폰에만 저장됩니다.'));
+
+    body.appendChild(renderPinChange());
+  }
+
+  function renderPinChange() {
+    var pan = el('div', 'panel');
+    var hd = el('div', 'panel-hd');
+    hd.appendChild(el('span', 'panel-t', '비밀번호 변경'));
+    pan.appendChild(hd);
+    var bd = el('div', 'pinbox');
+
+    var cur = el('input', 'lock-in sm'); cur.type = 'password';
+    cur.inputMode = 'numeric'; cur.autocomplete = 'off'; cur.maxLength = 12;
+    cur.placeholder = '현재 비밀번호';
+    var nw = el('input', 'lock-in sm'); nw.type = 'password';
+    nw.inputMode = 'numeric'; nw.autocomplete = 'off'; nw.maxLength = 12;
+    nw.placeholder = '새 비밀번호 (4~12자리 숫자)';
+    var nw2 = el('input', 'lock-in sm'); nw2.type = 'password';
+    nw2.inputMode = 'numeric'; nw2.autocomplete = 'off'; nw2.maxLength = 12;
+    nw2.placeholder = '새 비밀번호 확인';
+    bd.appendChild(cur); bd.appendChild(nw); bd.appendChild(nw2);
+
+    var go2 = el('button', 'btn pri wide', '비밀번호 바꾸기');
+    go2.type = 'button';
+    go2.addEventListener('click', function () {
+      if (!pinOk(cur.value)) { toast('현재 비밀번호가 다릅니다'); cur.focus(); return; }
+      var v = String(nw.value || '');
+      if (!/^[0-9]{4,12}$/.test(v)) { toast('새 비밀번호는 숫자 4~12자리여야 합니다'); nw.focus(); return; }
+      if (v !== nw2.value) { toast('새 비밀번호가 서로 다릅니다'); nw2.focus(); return; }
+      DATA.settings.pin = pinHash(v);
+      if (saveStore()) {
+        cur.value = nw.value = nw2.value = '';
+        toast('비밀번호를 바꿨습니다');
+      } else toast('저장에 실패했습니다');
+    });
+    bd.appendChild(go2);
+    bd.appendChild(el('p', 'note',
+      '남이 무심코 고치는 것을 막는 잠금입니다. 휴대폰 안에서만 확인하므로 ' +
+      '작정하고 들여다보면 풀립니다. 중요한 비밀번호는 쓰지 마세요.'));
+    pan.appendChild(bd);
+    return pan;
   }
 
   /* ========== 공지사항 ========== */
@@ -979,6 +1116,7 @@
       if (!txt) { toast('복원할 내용이 없습니다'); return; }
       var parsed;
       try { parsed = JSON.parse(txt); } catch (e) { toast('JSON 형식이 아닙니다'); return; }
+      if (!requireUnlock()) return;
       if (!window.confirm('현재 명단을 백업 내용으로 덮어씁니다. 계속할까요?')) return;
       DATA.crews = normalize({ crews: parsed.crews || parsed }).crews;
       DATA.edited = true; DATA.seedVersion = SEED_VERSION;
@@ -993,6 +1131,7 @@
     var reset = el('button', 'btn dan wide', '기본 명단으로 되돌리기');
     reset.type = 'button';
     reset.addEventListener('click', function () {
+      if (!requireUnlock()) return;
       if (!window.confirm('이 휴대폰에서 수정한 명단을 지우고 배포된 기본 명단으로 되돌립니다. 계속할까요?')) return;
       adoptSeed(); renderAll(); toast('기본 명단으로 되돌렸습니다');
     });
