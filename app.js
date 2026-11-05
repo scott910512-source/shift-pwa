@@ -279,7 +279,9 @@
     trash: ['M4.6 6.6h14.8', 'M9.4 6.6V4.7h5.2v1.9', 'M6.7 6.6l.8 12.7h9l.8-12.7',
             'M10.2 10.2v6.2M13.8 10.2v6.2'],
     left: ['M15 5l-7 7 7 7'],
-    right: ['M9 5l7 7-7 7']
+    right: ['M9 5l7 7-7 7'],
+    up: ['M5 15l7-7 7 7'],
+    down: ['M19 9l-7 7-7-7']
   };
 
   function el(tag, cls, text) {
@@ -661,7 +663,11 @@
       pan.appendChild(ph);
       var pb = el('div', 'panel-b');
       var ul = el('ul', 'names' + (list.length ? ' sel' : ' none'));
-      if (list.length) list.forEach(function (n) { ul.appendChild(el('li', null, n)); });
+      if (list.length) list.forEach(function (n, i) {
+        var li = el('li', i === 0 ? 'bd' : null, n);
+        if (i === 0) li.title = '보드';
+        ul.appendChild(li);
+      });
       else ul.appendChild(el('li', null, '등록된 조원이 없습니다'));
       pb.appendChild(ul);
       pan.appendChild(pb);
@@ -829,13 +835,35 @@
         cnt.textContent = arr.length + '명';
         if (!arr.length) rows.appendChild(el('p', 'note', '등록된 조원이 없습니다. 아래 버튼으로 추가하세요.'));
         arr.forEach(function (nm, idx) {
-          var r = el('div', 'mrow');
-          r.appendChild(el('span', 'idx', String(idx + 1)));
+          var board = idx === 0;                 // 맨 위가 보드
+          var r = el('div', 'mrow' + (board ? ' board' : ''));
+          r.appendChild(el('span', 'idx', board ? '보드' : String(idx + 1)));
           var inp = el('input', 'inp');
           inp.type = 'text'; inp.value = nm; inp.placeholder = '이름';
-          inp.setAttribute('aria-label', p.label + ' ' + (idx + 1) + '번 조원 이름');
+          inp.setAttribute('aria-label',
+            p.label + ' ' + (board ? '보드' : (idx + 1) + '번') + ' 조원 이름');
           inp.addEventListener('input', function () { arr[idx] = inp.value; });
           r.appendChild(inp);
+
+          // 순서 바꾸기 — 맨 위가 보드라 순서가 뜻을 가진다
+          var mv = el('div', 'movb');
+          function mover(dir, ic, label) {
+            var b = el('button', 'mvb');
+            b.type = 'button';
+            b.setAttribute('aria-label', (idx + 1) + '번 조원을 ' + label);
+            b.appendChild(icon(ic));
+            var edge = dir < 0 ? idx === 0 : idx === arr.length - 1;
+            if (edge) b.disabled = true;
+            else b.addEventListener('click', function () {
+              var t = arr[idx]; arr[idx] = arr[idx + dir]; arr[idx + dir] = t;
+              paint();
+            });
+            return b;
+          }
+          mv.appendChild(mover(-1, 'up', '위로'));
+          mv.appendChild(mover(1, 'down', '아래로'));
+          r.appendChild(mv);
+
           var del = el('button', 'delb');
           del.type = 'button';
           del.setAttribute('aria-label', p.label + ' ' + (idx + 1) + '번 조원 삭제');
@@ -875,6 +903,7 @@
     bar.appendChild(save);
     body.appendChild(bar);
     body.appendChild(el('p', 'note',
+      '맨 위가 보드입니다. ▲▼ 로 순서를 바꾸세요. ' +
       '이름을 비워두고 저장하면 그 칸은 자동으로 삭제됩니다. 수정한 내용은 이 휴대폰에만 저장됩니다.'));
 
     body.appendChild(renderPinChange());

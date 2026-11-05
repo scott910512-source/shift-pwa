@@ -481,3 +481,26 @@ textarea.inp{ min-height:120px; padding:10px 12px; font-family:var(--fm);
 @media (prefers-reduced-motion: reduce){ .lockpan.shake{ animation:none; } }
 .pinbox{ padding:0 12px 12px; display:flex; flex-direction:column; gap:0; }
 .pinbox .btn{ margin-top:10px; }
+
+/* ===== 조원 순서 바꾸기 (맨 위가 보드) ===== */
+.mrow.board .idx{
+  width:auto; flex:0 0 auto; min-width:26px;
+  font-family:var(--f); font-size:10.5px; font-weight:800;
+  color:var(--day); letter-spacing:-.01em;
+}
+.movb{ display:flex; flex-direction:column; gap:2px; flex:0 0 32px; }
+.mvb{
+  width:32px; height:21px; display:grid; place-items:center;
+  background:var(--card-3); border:1px solid var(--line); border-radius:6px;
+  color:var(--fg-2); padding:0;
+}
+.mvb svg{ width:14px; height:14px; }
+.mvb:disabled{ opacity:.28; }
+.mvb:not(:disabled):active{ background:var(--line-3); color:var(--fg); }
+
+/* 보기 화면 — 보드에 점 표시 */
+.names li.bd{ position:relative; }
+.names li.bd::after{
+  content:"보드"; margin-left:5px; font-size:9.5px; font-weight:800;
+  color:var(--day); vertical-align:2px; letter-spacing:-.02em;
+}
