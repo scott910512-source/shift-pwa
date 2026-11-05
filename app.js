@@ -120,6 +120,79 @@
   // 조 설정에서 편집하지 않고 배포 값만 쓴다.
   var STAFF = ['방우석', '류인환', '우두형', '고형진', '고현석', '김윤종', '김동주'];
 
+  /* ---------- 서버 명단 ----------
+     원본은 crew.json 하나뿐이다. 위젯·PC 바탕화면도 같은 파일을 읽는다.
+     위의 SEED_VERSION · seedCrews() · STAFF 는 한 번도 받지 못했을 때만 쓴다. */
+
+  var CREW_URL = './crew.json';
+  var SRV_KEY = 'shift-pwa:server:v1';
+  var SERVER = null;             // { seedVersion, updatedAt, crews, staff }
+  var serverState = '내장';      // 내장 / 저장본 / 최신
+
+  function readServerCache() {
+    try {
+      var raw = localStorage.getItem(SRV_KEY);
+      if (!raw) return null;
+      var j = JSON.parse(raw);
+      return (j && j.crews) ? j : null;
+    } catch (e) { return null; }
+  }
+
+  function applyServer(j, state) {
+    SERVER = {
+      seedVersion: (typeof j.seedVersion === 'number') ? j.seedVersion : SEED_VERSION,
+      updatedAt: String(j.updatedAt || ''),
+      crews: normalize({ crews: j.crews }).crews,
+      staff: Object.prototype.toString.call(j.staff) === '[object Array]'
+        ? j.staff.map(function (x) { return String(x == null ? '' : x).trim(); })
+            .filter(Boolean)
+        : STAFF.slice()
+    };
+    serverState = state;
+  }
+
+  // crew.json 의 내용 지문. 관리자가 버전 올리는 것을 잊어도
+  // 명단이 한 글자라도 바뀌면 값이 달라져서 모든 기기가 알아챈다.
+  function stampOf(crews, staff) {
+    var str = JSON.stringify(crews) + '|' + JSON.stringify(staff);
+    var a = 0x811c9dc5;
+    for (var i = 0; i < str.length; i++) {
+      a = ((a ^ str.charCodeAt(i)) * 0x01000193) >>> 0;
+    }
+    return a.toString(16);
+  }
+  function serverStamp() {
+    return SERVER ? stampOf(SERVER.crews, SERVER.staff) : stampOf(seedCrews(), STAFF);
+  }
+
+  function serverSeedVersion() { return SERVER ? SERVER.seedVersion : SEED_VERSION; }
+  function serverCrews() {
+    return SERVER ? normalize({ crews: SERVER.crews }).crews : seedCrews();
+  }
+  function serverStaff() { return SERVER ? SERVER.staff : STAFF; }
+
+  // 받아오기. 실패해도 저장본이나 내장본으로 돌아간다.
+  function fetchServerCrew(done) {
+    if (typeof fetch !== 'function') { done(false); return; }
+    var url = CREW_URL + '?t=' + Date.now();
+    var timer = setTimeout(function () { timer = null; done(false); }, 8000);
+    fetch(url, { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        if (timer == null) return;              // 이미 시간이 지나 포기했다
+        clearTimeout(timer); timer = null;
+        if (!j || !j.crews) { done(false); return; }
+        applyServer(j, '최신');
+        try { localStorage.setItem(SRV_KEY, JSON.stringify(j)); } catch (e) {}
+        done(true);
+      })
+      .catch(function () {
+        if (timer == null) return;
+        clearTimeout(timer); timer = null;
+        done(false);
+      });
+  }
+
   // 공지사항 — 여기에 추가하고 배포하면 모든 사람에게 보인다.
   var NOTICES = [
     {
@@ -169,7 +242,7 @@
 
   function defaults() {
     return {
-      version: 1, seedVersion: SEED_VERSION, edited: false,
+      version: 1, seedVersion: SEED_VERSION, edited: false, srvStamp: '',
       crews: seedCrews(), settings: { theme: 'dark', pin: pinHash(DEFAULT_PIN) }
     };
   }
@@ -180,6 +253,7 @@
       version: 1,
       seedVersion: (typeof raw.seedVersion === 'number' && isFinite(raw.seedVersion)) ? raw.seedVersion : 0,
       edited: raw.edited === true,
+      srvStamp: (typeof raw.srvStamp === 'string') ? raw.srvStamp : '',
       crews: {},
       settings: { theme: 'dark', pin: pinHash(DEFAULT_PIN) }
     };
@@ -229,19 +303,22 @@
   }
   function applySeedIfNeeded() {
     seedUpdateAvailable = false;
-    if (DATA.seedVersion === SEED_VERSION) return;
+    var st = serverStamp();
+    if (DATA.srvStamp === st) return;              // 이미 같은 명단이다
     if (!DATA.edited) {
-      DATA.crews = seedCrews();
-      DATA.seedVersion = SEED_VERSION;
+      DATA.crews = serverCrews();
+      DATA.seedVersion = serverSeedVersion();
+      DATA.srvStamp = st;
       saveStore();
-      console.log('[근무표] 기본 명단 v' + SEED_VERSION + ' 을 반영했습니다.');
+      console.log('[근무표] 관리자 명단 v' + DATA.seedVersion + ' 을 반영했습니다.');
     } else {
-      seedUpdateAvailable = true;
+      seedUpdateAvailable = true;          // 이 폰에서 고친 것이 있어 묻는다
     }
   }
   function adoptSeed() {
-    DATA.crews = seedCrews();
-    DATA.seedVersion = SEED_VERSION;
+    DATA.crews = serverCrews();
+    DATA.seedVersion = serverSeedVersion();
+    DATA.srvStamp = serverStamp();
     DATA.edited = false;
     draft = deepCopyCrews();
     saveStore();
@@ -674,15 +751,16 @@
       body.appendChild(pan);
     });
 
-    if (STAFF.length) {
+    var staff = serverStaff();
+    if (staff.length) {
       var sp = el('div', 'panel');
       var sh = el('div', 'panel-hd');
       sh.appendChild(el('span', 'panel-t', '상근'));
-      sh.appendChild(el('span', 'panel-c', '교대 없음 · ' + STAFF.length + '명'));
+      sh.appendChild(el('span', 'panel-c', '교대 없음 · ' + staff.length + '명'));
       sp.appendChild(sh);
       var sb = el('div', 'panel-b');
       var sul = el('ul', 'names sel');
-      STAFF.forEach(function (n) { sul.appendChild(el('li', null, n)); });
+      staff.forEach(function (n) { sul.appendChild(el('li', null, n)); });
       sb.appendChild(sul);
       sp.appendChild(sb);
       body.appendChild(sp);
@@ -756,6 +834,37 @@
       '다만 이 휴대폰에서 고친 명단도 함께 사라집니다.'));
   }
 
+  // 명단이 서버에서 온 것인지, 이 기기에 있던 것인지 보여준다.
+  function serverInfoBox() {
+    var box = el('div', 'srvbox');
+    var head = el('div', 'srvrow');
+    head.appendChild(el('span', 'srv-t', '관리자 명단 (서버)'));
+    var tag = el('span', 'srv-tag' + (serverState === '최신' ? ' on' : ''), serverState);
+    head.appendChild(tag);
+    box.appendChild(head);
+
+    var when = SERVER && SERVER.updatedAt ? SERVER.updatedAt.slice(0, 10) : '-';
+    box.appendChild(el('div', 'srv-b',
+      'v' + serverSeedVersion() + ' · ' + when +
+      (DATA.edited ? ' · 이 기기에서 수정됨' : ' · 서버와 같음')));
+
+    var rb = el('button', 'btn sm wide', '서버에서 다시 받기');
+    rb.type = 'button';
+    rb.addEventListener('click', function () {
+      rb.disabled = true; rb.textContent = '받는 중…';
+      fetchServerCrew(function (ok) {
+        rb.disabled = false; rb.textContent = '서버에서 다시 받기';
+        if (!ok) { toast('서버에 연결하지 못했습니다'); return; }
+        applySeedIfNeeded();
+        homeSig = '';
+        renderAll();
+        toast(seedUpdateAvailable ? '새 명단이 있습니다' : '최신 명단입니다');
+      });
+    });
+    box.appendChild(rb);
+    return box;
+  }
+
   function renderCrewSet() {
     if (!crewUnlocked) { renderCrewLock(); return; }
     ensureDraft();
@@ -771,6 +880,8 @@
     });
     lockbar.appendChild(lk);
     body.appendChild(lockbar);
+
+    body.appendChild(serverInfoBox());
 
     if (seedUpdateAvailable) {
       var nb = el('div', 'notice');
@@ -894,7 +1005,8 @@
     save.addEventListener('click', function () {
       DATA.crews = normalize({ crews: draft }).crews;
       DATA.edited = true;
-      DATA.seedVersion = SEED_VERSION;
+      DATA.seedVersion = serverSeedVersion();
+      DATA.srvStamp = serverStamp();     // 이 서버 명단은 봤고, 내 것을 쓰기로 했다
       seedUpdateAvailable = false;
       draft = deepCopyCrews();
       if (saveStore()) { homeSig = ''; renderCrewSet(); renderHome(true); toast('저장했습니다'); }
@@ -1063,11 +1175,12 @@
     f.appendChild(pan);
 
     f.appendChild(kvPanel('앱 정보', null, [
-      ['기본 명단 버전', 'v' + SEED_VERSION],
-      ['현재 명단', DATA.edited ? '이 휴대폰에서 수정함' : '배포된 기본 명단'],
+      ['관리자 명단', 'v' + serverSeedVersion() + ' · ' + serverState],
+      ['명단 갱신일', (SERVER && SERVER.updatedAt) ? SERVER.updatedAt : '-'],
+      ['현재 명단', DATA.edited ? '이 휴대폰에서 수정함' : '관리자 명단과 같음'],
       ['오프라인', '지원'],
       ['데이터 저장', '이 휴대폰'],
-      ['서버 전송', '없음']
+      ['서버로 보내는 것', '없음 (받기만 함)']
     ]));
     return f;
   }
@@ -1148,7 +1261,9 @@
       if (!requireUnlock()) return;
       if (!window.confirm('현재 명단을 백업 내용으로 덮어씁니다. 계속할까요?')) return;
       DATA.crews = normalize({ crews: parsed.crews || parsed }).crews;
-      DATA.edited = true; DATA.seedVersion = SEED_VERSION;
+      DATA.edited = true;
+      DATA.seedVersion = serverSeedVersion();
+      DATA.srvStamp = serverStamp();
       seedUpdateAvailable = false;
       draft = deepCopyCrews();
       saveStore(); homeSig = ''; renderAll(); toast('복원했습니다');
@@ -1255,6 +1370,8 @@
   /* ========== 초기화 ========== */
 
   function init() {
+    var cached = readServerCache();
+    if (cached) applyServer(cached, '저장본');   // 비행기 모드에서도 바로 뜬다
     loadStore();
     applyTheme();
 
@@ -1326,10 +1443,23 @@
 
     runSelfTest();
 
+    // 서버(crew.json) 확인은 화면을 다 그린 뒤에. 실패하면 조용히 넘어간다.
+    fetchServerCrew(function (ok) {
+      if (!ok) return;
+      applySeedIfNeeded();
+      homeSig = '';
+      renderAll();
+    });
+
     window.SHIFT = {
       shiftOf: shiftOf, runSelfTest: runSelfTest, keyOf: keyOf, currentShift: currentShift,
       data: function () { return DATA; }, go: go, openSheet: openSheet,
-      seedVersion: SEED_VERSION, adoptSeed: adoptSeed, staff: STAFF
+      seedVersion: SEED_VERSION, adoptSeed: adoptSeed,
+      staff: function () { return serverStaff(); },
+      server: function () {
+        return { state: serverState, version: serverSeedVersion(), updatedAt: SERVER ? SERVER.updatedAt : '' };
+      },
+      refreshServer: fetchServerCrew
     };
   }
 

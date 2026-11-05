@@ -4,7 +4,7 @@
    갱신하려면 CACHE_VERSION 숫자를 올리세요.
    ============================================================ */
 
-var CACHE_VERSION = 'v17';
+var CACHE_VERSION = 'v18';
 var CACHE_NAME = 'shift-shell-' + CACHE_VERSION;
 var FONT_CACHE = 'shift-fonts-' + CACHE_VERSION;
 
@@ -75,6 +75,26 @@ self.addEventListener('fetch', function (event) {
   }
 
   if (url.origin !== self.location.origin) return;
+
+  /* 명단(crew.json)은 network-first.
+     관리자가 올린 새 명단이 바로 보여야 하므로 캐시를 먼저 보지 않는다.
+     네트워크가 안 되면 캐시에 있던 마지막 명단을 쓴다. */
+  if (/\/crew\.json$/.test(url.pathname)) {
+    event.respondWith(
+      fetch(req, { cache: 'no-store' }).then(function (res) {
+        if (res && res.ok && res.type === 'basic') {
+          var copy = res.clone();
+          caches.open(CACHE_NAME).then(function (c) { c.put('./crew.json', copy); });
+        }
+        return res;
+      }).catch(function () {
+        return caches.match('./crew.json', { ignoreSearch: true }).then(function (hit) {
+          return hit || new Response('', { status: 504, statusText: 'offline' });
+        });
+      })
+    );
+    return;
+  }
 
   /* 앱 셸: cache-first, 없으면 네트워크 후 캐시 저장 */
   event.respondWith(
