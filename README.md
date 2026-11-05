@@ -44,38 +44,24 @@ crew.json ──┬── 웹앱 (app.js)
             └── PC 바탕화면 (desktop/wallpaper.py)
 ```
 
-### 방법 1 — 앱에서 바로 올리기 (관리자 토큰)
-
-**조 설정**(PIN 해제) → 맨 아래 `관리자` 칸에 GitHub 토큰을 한 번 넣어두면,
-그 기기에서 고친 명단을 `이 명단을 서버에 올리기` 버튼으로 바로 커밋할 수 있습니다.
-GitHub Pages 가 다시 배포되는 1~2분 뒤 모든 기기에 반영됩니다.
-
-토큰 만들기 — <https://github.com/settings/personal-access-tokens>
-
-- `Fine-grained token` 으로 만든다
-- Repository access → **Only select repositories** → `shift-pwa` 만 고른다
-- Permissions → Repository permissions → **Contents: Read and write** (이것만)
-- 만료일을 넣는다 (90일 등). 만료되면 새로 만들어 다시 넣으면 된다
-
-> **토큰은 비밀번호입니다.** 이 기기의 `localStorage` 에만 저장되고
-> `api.github.com` 외에는 아무데도 보내지 않습니다. 다만 이 휴대폰을 잠금 없이
-> 남이 쓰면 명단을 바꿀 수 있습니다. 관리자 기기에만 넣으세요.
-> 토큰이 샜으면 GitHub 설정에서 지우면 즉시 무효가 됩니다.
-> 쓰기 범위는 이 저장소 파일뿐이라, 최악의 경우에도 피해가 이 저장소에 한정됩니다.
-
-올린 뒤에는 작업 PC 에서 내장본도 맞춰 두세요 (오프라인 기기 대비):
-
-```
-git pull
-node tools/sync-crew.js --from-json    # crew.json -> app.js + wallpaper.py
-git commit -am "내장 명단 동기화" && git push
-```
-
-### 방법 2 — 코드에서 바꾸기
+### 명단을 바꾸는 방법
 
 1. `app.js` 의 `seedCrews()` / `STAFF` 를 수정
 2. `node tools/sync-crew.js` — `crew.json` 과 `desktop/wallpaper.py` 를 맞춘다
-3. `main` 에 푸시
+3. `main` 에 푸시 → 1~2분 뒤 모든 기기 반영
+
+GitHub 웹에서 `crew.json` 을 직접 고쳐도 됩니다.
+
+<https://github.com/scott910512-source/shift-pwa/edit/main/crew.json>
+
+로그인만 돼 있으면 토큰 없이 바로 고칠 수 있습니다. 대신 JSON 문법이
+틀리면 앱이 명단을 못 읽으니 쉼표·괄호를 조심하세요. 고친 뒤에는
+작업 PC 에서 `node tools/sync-crew.js --from-json` 으로 내장본도 맞춰
+두세요 (한 번도 서버에 붙어본 적 없는 기기 대비).
+
+> 앱 안에서 고치는 것은 **그 기기에만** 적용됩니다. 앱이 서버에 쓰는
+> 기능은 없습니다 — GitHub Pages 는 읽기 전용이고, 거기에 쓰려면
+> 브라우저에 GitHub 자격증명을 두어야 해서 넣지 않았습니다.
 
 `SEED_VERSION` 을 올리는 것은 **선택**입니다. 앱이 `crew.json` 의 내용 지문을 보기 때문에
 버전을 안 올려도 이름이 한 글자만 바뀌면 모든 기기가 알아챕니다.
@@ -85,12 +71,13 @@ git commit -am "내장 명단 동기화" && git push
 ### 두 방향이 부딪히지 않게
 
 `tools/sync-crew.js` 는 `crew.json` 의 `seedVersion` 이 `app.js` 보다 높으면
-**멈춥니다**. 앱에서 올린 명단을 옛 `app.js` 로 덮어쓰는 사고를 막기 위한 것입니다.
+**멈춥니다**. GitHub 웹에서 `crew.json` 만 고친 것을 옛 `app.js` 로
+덮어쓰는 사고를 막기 위한 것입니다.
 
 | 상황 | 명령 |
 |---|---|
-| 코드에서 고쳤다 | `node tools/sync-crew.js` |
-| 앱에서 올렸다 → 코드에 반영 | `node tools/sync-crew.js --from-json` |
+| `app.js` 에서 고쳤다 | `node tools/sync-crew.js` |
+| `crew.json` 을 GitHub 웹에서 고쳤다 | `node tools/sync-crew.js --from-json` |
 
 ### 접속자 기기에서 일어나는 일
 
