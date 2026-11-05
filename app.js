@@ -73,7 +73,7 @@
      명단을 바꿔 배포할 때는 SEED_VERSION 을, 공지를 바꿀 때는
      NOTICES 만 고치고 sw.js 의 CACHE_VERSION 을 올린다. */
 
-  var SEED_VERSION = 10;
+  var SEED_VERSION = 11;
 
   function seedCrews() {
     // 조직도 기준. 각 공장 안의 순서는 Board → Field 1 → Field 2 → Field 3.
@@ -86,7 +86,7 @@
         factories: {
           '1': ['곽대력', '송상현', '문정중'],
           '2': ['하형만', '박성현', '진영욱'],
-          '3': ['민경찬', '구태현', '여형진']
+          '3': ['심민제', '민경찬', '구태현', '여형진']
         }
       },
       B: {
@@ -163,6 +163,129 @@
   }
   function serverStamp() {
     return SERVER ? stampOf(SERVER.crews, SERVER.staff) : stampOf(seedCrews(), STAFF);
+  }
+
+  /* ---------- 관리자: 웹에서 바로 서버에 올리기 ----------
+     GitHub Pages 는 정적이라 브라우저가 파일을 직접 못 쓴다.
+     그래서 GitHub API 로 crew.json 을 커밋한다. 토큰이 필요하다.
+     토큰은 이 기기에만 저장되고 api.github.com 외에는 아무데도 안 간다. */
+
+  var GH_KEY = 'shift-pwa:gh:v1';
+  var GH_BRANCH = 'main';
+  var GH_PATH = 'crew.json';
+
+  // 주소에서 owner/repo 를 알아낸다. scott910512-source.github.io/shift-pwa/
+  function ghTarget() {
+    var h = String(location.hostname || '');
+    var m = h.match(/^([^.]+)\.github\.io$/i);
+    var owner = m ? m[1] : '';
+    var seg = String(location.pathname || '').split('/').filter(Boolean);
+    var repo = seg.length ? seg[0] : '';
+    // 하위경로 없이 owner.github.io 로 서비스하는 경우
+    if (owner && (!repo || /\.(html|json|js|css)$/i.test(repo))) repo = owner + '.github.io';
+    return { owner: owner, repo: repo, ok: !!(owner && repo) };
+  }
+
+  function ghToken() {
+    try { return localStorage.getItem(GH_KEY) || ''; } catch (e) { return ''; }
+  }
+  function setGhToken(v) {
+    try {
+      if (v) localStorage.setItem(GH_KEY, v);
+      else localStorage.removeItem(GH_KEY);
+      return true;
+    } catch (e) { return false; }
+  }
+  function maskToken(t) {
+    if (!t) return '';
+    if (t.length <= 10) return t.slice(0, 2) + '…';
+    return t.slice(0, 6) + '…' + t.slice(-4);
+  }
+
+  function b64utf8(str) {
+    var bytes = unescape(encodeURIComponent(str));   // UTF-8 바이트열
+    return btoa(bytes);
+  }
+  function utf8b64(b64) {
+    return decodeURIComponent(escape(atob(String(b64).replace(/\s+/g, ''))));
+  }
+  function todayKST() {
+    var d = new Date(Date.now() + 9 * 3600000);
+    var mm = d.getUTCMonth() + 1, dd = d.getUTCDate();
+    return d.getUTCFullYear() + '-' + (mm < 10 ? '0' : '') + mm + '-' + (dd < 10 ? '0' : '') + dd;
+  }
+
+  function ghFetch(url, opts) {
+    var o = opts || {};
+    o.headers = o.headers || {};
+    o.headers['Accept'] = 'application/vnd.github+json';
+    o.headers['X-GitHub-Api-Version'] = '2022-11-28';
+    o.headers['Authorization'] = 'Bearer ' + ghToken();
+    o.cache = 'no-store';
+    return fetch(url, o);
+  }
+
+  function ghMsg(status) {
+    if (status === 401) return '토큰이 잘못되었거나 만료되었습니다';
+    if (status === 403) return '권한이 없습니다. 토큰 권한에 Contents 쓰기가 있어야 합니다';
+    if (status === 404) return '저장소를 못 찾았습니다. 토큰이 이 저장소를 포함하는지 확인하세요';
+    if (status === 409 || status === 422) return '그 사이 서버가 먼저 바뀌었습니다. 다시 받은 뒤 올리세요';
+    return 'GitHub 오류 (' + status + ')';
+  }
+
+  /* 지금 이 기기의 명단을 서버 crew.json 으로 커밋한다.
+     done(ok, 메시지) 로 결과를 알린다. */
+  function pushToServer(done) {
+    var t = ghTarget();
+    if (!ghToken()) { done(false, '먼저 관리자 토큰을 저장하세요'); return; }
+    if (!t.ok) { done(false, '주소에서 저장소를 알아내지 못했습니다'); return; }
+    if (typeof fetch !== 'function') { done(false, '이 브라우저에서는 올릴 수 없습니다'); return; }
+
+    var api = 'https://api.github.com/repos/' + t.owner + '/' + t.repo + '/contents/' + GH_PATH;
+
+    ghFetch(api + '?ref=' + GH_BRANCH).then(function (r) {
+      if (!r.ok) throw { status: r.status };
+      return r.json();
+    }).then(function (meta) {
+      var cur = {};
+      try { cur = JSON.parse(utf8b64(meta.content)); } catch (e) { cur = {}; }
+
+      var body = {
+        seedVersion: (typeof cur.seedVersion === 'number' ? cur.seedVersion : SEED_VERSION) + 1,
+        updatedAt: todayKST(),
+        crews: normalize({ crews: DATA.crews }).crews,
+        // 상근 명단은 앱에서 편집하지 않으므로 서버 값을 그대로 둔다
+        staff: Object.prototype.toString.call(cur.staff) === '[object Array]' ? cur.staff : serverStaff()
+      };
+      var text = JSON.stringify(body, null, 2) + '\n';
+
+      return ghFetch(api, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: '명단 수정 (앱에서) v' + body.seedVersion,
+          content: b64utf8(text),
+          sha: meta.sha,
+          branch: GH_BRANCH
+        })
+      }).then(function (r2) {
+        if (!r2.ok) throw { status: r2.status };
+        return body;
+      });
+    }).then(function (body) {
+      // 올린 내용을 이 기기의 '서버 명단' 으로 삼는다
+      applyServer(body, '최신');
+      try { localStorage.setItem(SRV_KEY, JSON.stringify(body)); } catch (e) {}
+      DATA.seedVersion = body.seedVersion;
+      DATA.srvStamp = serverStamp();
+      DATA.edited = false;              // 이제 서버와 같다
+      seedUpdateAvailable = false;
+      saveStore();
+      homeSig = '';
+      done(true, 'v' + body.seedVersion + ' 으로 올렸습니다');
+    }).catch(function (e) {
+      done(false, (e && e.status) ? ghMsg(e.status) : '네트워크 오류로 올리지 못했습니다');
+    });
   }
 
   function serverSeedVersion() { return SERVER ? SERVER.seedVersion : SEED_VERSION; }
@@ -865,6 +988,68 @@
     return box;
   }
 
+  /* 관리자 칸 — 토큰 등록과 '서버에 올리기'.
+     PIN 을 푼 사람만 여기까지 온다. */
+  function adminBox() {
+    var box = el('div', 'srvbox');
+    var head = el('div', 'srvrow');
+    head.appendChild(el('span', 'srv-t', '관리자'));
+    var tk = ghToken();
+    head.appendChild(el('span', 'srv-tag' + (tk ? ' on' : ''), tk ? '토큰 등록됨' : '토큰 없음'));
+    box.appendChild(head);
+
+    var t = ghTarget();
+    box.appendChild(el('div', 'srv-b', t.ok
+      ? t.owner + '/' + t.repo + ' · ' + GH_BRANCH + ' · ' + GH_PATH
+      : '이 주소에서는 올릴 수 없습니다 (GitHub Pages 에서 열어야 합니다)'));
+
+    if (!tk) {
+      box.appendChild(el('div', 'srv-help',
+        'GitHub 토큰을 한 번 넣어두면, 이 기기에서 고친 명단을 바로 서버에 올릴 수 있습니다. ' +
+        '토큰은 이 기기에만 저장되고 GitHub 외에는 아무데도 보내지 않습니다.'));
+      var inp = el('input', 'lock-in');
+      inp.type = 'password';
+      inp.placeholder = 'github_pat_... 또는 ghp_...';
+      inp.autocomplete = 'off';
+      inp.spellcheck = false;
+      box.appendChild(inp);
+      var sv = el('button', 'btn pri wide', '토큰 저장');
+      sv.type = 'button';
+      sv.addEventListener('click', function () {
+        var v = String(inp.value || '').trim();
+        if (!v) { toast('토큰을 넣으세요'); return; }
+        if (!setGhToken(v)) { toast('저장하지 못했습니다'); return; }
+        renderCrewSet(); toast('토큰을 저장했습니다');
+      });
+      box.appendChild(sv);
+      return box;
+    }
+
+    box.appendChild(el('div', 'srv-help', '토큰: ' + maskToken(tk)));
+
+    var up = el('button', 'btn pri wide', '이 명단을 서버에 올리기');
+    up.type = 'button';
+    up.addEventListener('click', function () {
+      if (!window.confirm('이 기기의 명단을 서버에 올립니다.\n모든 사람의 앱 · 위젯 · PC 바탕화면에 반영됩니다.\n계속할까요?')) return;
+      up.disabled = true; up.textContent = '올리는 중…';
+      pushToServer(function (ok, msg) {
+        up.disabled = false; up.textContent = '이 명단을 서버에 올리기';
+        toast(ok ? msg : msg);
+        if (ok) { renderAll(); window.alert('서버에 올렸습니다.\n' + msg + '\n\n다른 기기에는 1~2분 뒤 반영됩니다.'); }
+      });
+    });
+    box.appendChild(up);
+
+    var cl = el('button', 'btn sm wide', '토큰 지우기');
+    cl.type = 'button';
+    cl.addEventListener('click', function () {
+      if (!window.confirm('이 기기에서 토큰을 지웁니다. 계속할까요?')) return;
+      setGhToken(''); renderCrewSet(); toast('토큰을 지웠습니다');
+    });
+    box.appendChild(cl);
+    return box;
+  }
+
   function renderCrewSet() {
     if (!crewUnlocked) { renderCrewLock(); return; }
     ensureDraft();
@@ -882,6 +1067,7 @@
     body.appendChild(lockbar);
 
     body.appendChild(serverInfoBox());
+    body.appendChild(adminBox());
 
     if (seedUpdateAvailable) {
       var nb = el('div', 'notice');
